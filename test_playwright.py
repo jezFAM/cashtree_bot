@@ -10,7 +10,7 @@ from playwright.async_api import async_playwright
 from playwright_stealth import Stealth
 
 
-async def fetch_with_playwright(url: str, user_agent: str = None) -> Tuple[str, int]:
+async def fetch_with_playwright(url: str, user_agent: str = None) -> Tuple[str, int, list]:
     """
     Playwright를 사용하여 URL을 가져옵니다. 네이버의 봇 감지를 우회하기 위한 다양한 기법을 사용합니다.
 
@@ -19,7 +19,7 @@ async def fetch_with_playwright(url: str, user_agent: str = None) -> Tuple[str, 
         user_agent: 사용할 User-Agent (None이면 기본값 사용)
 
     Returns:
-        Tuple[str, int]: (HTML 콘텐츠, HTTP 상태 코드)
+        Tuple[str, int, list]: (HTML 콘텐츠, HTTP 상태 코드, 브라우저 쿠키)
     """
     try:
         async with async_playwright() as p:
@@ -161,17 +161,21 @@ async def fetch_with_playwright(url: str, user_agent: str = None) -> Tuple[str, 
             # HTML 콘텐츠 가져오기 (모든 상태 코드에 대해)
             html_content = await page.content()
 
+            # 브라우저에서 쿠키 가져오기
+            browser_cookies = await context.cookies()
+
             print(f"📄 HTML 길이: {len(html_content)} bytes")
+            print(f"🍪 쿠키 개수: {len(browser_cookies)}")
 
             # 브라우저 종료
             await browser.close()
 
-            return html_content, status_code
+            return html_content, status_code, browser_cookies
 
     except Exception as e:
         print(f"❌ 오류 발생: {str(e)}")
         print(traceback.format_exc())
-        return "", 0
+        return "", 0, []
 
 
 async def main():
@@ -185,11 +189,17 @@ async def main():
     print("-" * 80)
 
     # 페이지 가져오기
-    html, status_code = await fetch_with_playwright(test_url)
+    html, status_code, cookies = await fetch_with_playwright(test_url)
 
     print("-" * 80)
     print("결과:")
     print(f"  상태 코드: {status_code}")
+    print(f"  쿠키 개수: {len(cookies)}")
+
+    if cookies:
+        print(f"  쿠키 목록:")
+        for cookie in cookies[:5]:  # 처음 5개만 표시
+            print(f"    - {cookie['name']}: {cookie['value'][:50]}...")
 
     if status_code == 200:
         print("  ✅ 성공! 200 응답을 받았습니다.")

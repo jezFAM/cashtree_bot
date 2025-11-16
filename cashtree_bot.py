@@ -1103,6 +1103,18 @@ class CookieManager:
             return ""
         return "; ".join([f"{name}={value}" for name, value in cookies.items()])
 
+    def set_cookies_from_playwright(self, playwright_cookies: List[Dict], base_url: str):
+        """Playwright에서 가져온 쿠키를 저장소에 추가합니다"""
+        domain = self.extract_domain(base_url)
+
+        if domain not in self.domain_cookies:
+            self.domain_cookies[domain] = {}
+
+        # Playwright 쿠키 형식: {'name': '...', 'value': '...', 'domain': '...', ...}
+        for cookie in playwright_cookies:
+            if 'name' in cookie and 'value' in cookie:
+                self.domain_cookies[domain][cookie['name']] = cookie['value']
+
 
 class BrowserLikeClient:
     """실제 브라우저와 유사하게 동작하는 HTTP 클라이언트"""
@@ -3701,7 +3713,7 @@ def extract_key_values_from_script(html_content):
     return results
 
 
-async def fetch_with_playwright(url: str, user_agent: str = None, cookies: Dict = None) -> Tuple[str, int]:
+async def fetch_with_playwright(url: str, user_agent: str = None, cookies: Dict = None) -> Tuple[str, int, List[Dict]]:
     """
     Playwright를 사용하여 URL을 가져옵니다. 네이버의 봇 감지를 우회하기 위한 다양한 기법을 사용합니다.
 
@@ -3711,7 +3723,7 @@ async def fetch_with_playwright(url: str, user_agent: str = None, cookies: Dict 
         cookies: 설정할 쿠키들
 
     Returns:
-        Tuple[str, int]: (HTML 콘텐츠, HTTP 상태 코드)
+        Tuple[str, int, List[Dict]]: (HTML 콘텐츠, HTTP 상태 코드, 브라우저 쿠키 리스트)
     """
     try:
         async with async_playwright() as p:
@@ -3856,15 +3868,18 @@ async def fetch_with_playwright(url: str, user_agent: str = None, cookies: Dict 
             else:
                 html_content = await page.content() if status_code else ""
 
+            # 브라우저에서 쿠키 가져오기 (API 요청에 사용하기 위해)
+            browser_cookies = await context.cookies()
+
             # 브라우저 종료
             await browser.close()
 
-            return html_content, status_code
+            return html_content, status_code, browser_cookies
 
     except Exception as e:
         msg = f'fetch_with_playwright error: {str(e)}\n{traceback.format_exc()}'
         asyncio.create_task(writelog(msg, False))
-        return "", 0
+        return "", 0, []
 
 
 async def get_store_answer(store_url, cnt, interval, pattern):
@@ -3894,7 +3909,13 @@ async def get_store_answer(store_url, cnt, interval, pattern):
             while try_count < 3:
                 try:
                     # Playwright를 사용하여 페이지 가져오기 (봇 감지 우회)
-                    html, status_code = await fetch_with_playwright(store_url, user_agent=dataInfo.User_Agent)
+                    html, status_code, browser_cookies = await fetch_with_playwright(store_url, user_agent=dataInfo.User_Agent)
+
+                    # Playwright에서 얻은 쿠키를 httpx 클라이언트에 적용 (API 요청 시 사용)
+                    if browser_cookies:
+                        client.cookie_manager.set_cookies_from_playwright(browser_cookies, store_url)
+                        asyncio.create_task(
+                            writelog(f'Applied {len(browser_cookies)} cookies from Playwright to httpx client for {store_url}', False))
 
                     if status_code == 429:
                         # 429 Too Many Requests
