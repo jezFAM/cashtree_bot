@@ -1119,12 +1119,15 @@ class CookieManager:
 class BrowserLikeClient:
     """실제 브라우저와 유사하게 동작하는 HTTP 클라이언트"""
 
-    def __init__(self, user_agent, store_nnb, store_fwb, store_buc, store_token, proxy_config: Optional[Union[str, ProxyInfo]] = None, **kwargs):
+    def __init__(self, user_agent, store_token, store_nnb: Optional[str] = None, store_fwb: Optional[str] = None, store_buc: Optional[str] = None, proxy_config: Optional[Union[str, ProxyInfo]] = None, **kwargs):
         """
         Args:
             user_agent: 사용할 User-Agent 문자열
             store_token: 네이버 스토어 보안 토큰
-            proxy: 프록시 URL (선택 사항)
+            store_nnb: 네이버 NNB 쿠키 (선택 사항, Playwright 없이 요청 시 필요)
+            store_fwb: 네이버 FWB 쿠키 (선택 사항, Playwright 없이 요청 시 필요)
+            store_buc: 네이버 BUC 쿠키 (선택 사항, Playwright 없이 요청 시 필요)
+            proxy_config: 프록시 설정 (선택 사항)
         """
         self.cookie_manager = CookieManager()
         self.user_agent = user_agent
@@ -1282,20 +1285,25 @@ class BrowserLikeClient:
         # 3. 도메인 조건 및 쿠키 상태에 따라 Cookie 헤더 설정
         if is_naver_domain:
             # 네이버 관련 도메인일 경우: 초기 쿠키 주입 로직 적용
-            # 지정된 초기 쿠키
-            timestamp_part = int(time.time()) - 9600
-            initial_cookie = f'NNB={self.store_nnb}; BUC={self.store_buc}; _fwb={self.store_fwb}; X-Wtm-Cpt-Tk={self.store_token}; ba.uuid=0'
+            initial_cookie = None
+
+            # store_* 값이 모두 있는 경우 전체 초기 쿠키 생성
+            if self.store_nnb and self.store_fwb and self.store_buc and self.store_token:
+                initial_cookie = f'NNB={self.store_nnb}; BUC={self.store_buc}; _fwb={self.store_fwb}; X-Wtm-Cpt-Tk={self.store_token}; ba.uuid=0'
+            # store_token만 있는 경우 (Playwright 쿠키 사용 시)
+            elif self.store_token:
+                initial_cookie = f'X-Wtm-Cpt-Tk={self.store_token}; ba.uuid=0'
 
             if cookie_header_from_manager:
-                # CookieManager 쿠키가 있지만, ba.uuid가 없는 경우 앞에 추가
-                # 더 정교하게 하려면 쿠키 파싱/병합이 필요하지만 여기서는 단순 문자열 처리 유지.
-                if 'ba.uuid' not in cookie_header_from_manager:
+                # CookieManager 쿠키가 있는 경우
+                if initial_cookie and 'ba.uuid' not in cookie_header_from_manager:
+                    # 초기 쿠키가 있고 ba.uuid가 없으면 앞에 추가
                     headers['Cookie'] = f"{initial_cookie}; {cookie_header_from_manager}"
                 else:
-                    # CookieManager 쿠키에 ba.uuid 가 이미 있으면 매니저 쿠키 사용
+                    # CookieManager 쿠키 우선 사용
                     headers['Cookie'] = cookie_header_from_manager
-            else:
-                # CookieManager 쿠키가 없으면 초기 쿠키만 설정
+            elif initial_cookie:
+                # CookieManager 쿠키가 없고 초기 쿠키가 있으면 초기 쿠키만 설정
                 headers['Cookie'] = initial_cookie
         else:
             # 네이버 관련 도메인이 아닐 경우: CookieManager의 쿠키만 사용
@@ -2834,9 +2842,14 @@ async def get_place_answer(place_url, cnt, interval, pattern):
 
         return list(dict.fromkeys(answer_list)), isSuccess
 
-    # BrowserLikeClient 생성
+    # BrowserLikeClient 생성 (Playwright 없이 직접 요청하므로 모든 쿠키 필요)
     client = BrowserLikeClient(
-        user_agent=dataInfo.User_Agent, store_nnb=dataInfo.store_nnb, store_fwb=dataInfo.store_fwb, store_buc=dataInfo.store_buc, store_token=dataInfo.store_token, proxy_config=proxyInfo.url)
+        user_agent=dataInfo.User_Agent,
+        store_token=dataInfo.store_token,
+        store_nnb=dataInfo.store_nnb,
+        store_fwb=dataInfo.store_fwb,
+        store_buc=dataInfo.store_buc,
+        proxy_config=proxyInfo.url)
 
     # refresh 버퍼에 추가
     async with dataInfo.refresh_buf_lock:
@@ -3622,9 +3635,14 @@ async def get_kakao_place_answer(place_url, cnt, interval, pattern):
 
         return list(dict.fromkeys(answer_list)), isSuccess
 
-    # BrowserLikeClient 생성
+    # BrowserLikeClient 생성 (Playwright 없이 직접 요청하므로 모든 쿠키 필요)
     client = BrowserLikeClient(
-        user_agent=dataInfo.User_Agent, store_nnb=dataInfo.store_nnb, store_fwb=dataInfo.store_fwb, store_buc=dataInfo.store_buc, store_token=dataInfo.store_token, proxy_config=proxyInfo.url)
+        user_agent=dataInfo.User_Agent,
+        store_token=dataInfo.store_token,
+        store_nnb=dataInfo.store_nnb,
+        store_fwb=dataInfo.store_fwb,
+        store_buc=dataInfo.store_buc,
+        proxy_config=proxyInfo.url)
 
     # refresh 버퍼에 추가
     async with dataInfo.refresh_buf_lock:
@@ -4009,9 +4027,11 @@ async def get_store_answer(store_url, cnt, interval, pattern):
 
         return list(dict.fromkeys(answer_list)), isSuccess
 
-    # BrowserLikeClient 생성
+    # BrowserLikeClient 생성 (Playwright가 쿠키를 제공하므로 store_token만 필요)
     client = BrowserLikeClient(
-        user_agent=dataInfo.User_Agent, store_nnb=dataInfo.store_nnb, store_fwb=dataInfo.store_fwb, store_buc=dataInfo.store_buc, store_token=dataInfo.store_token, proxy_config=proxyInfo.url)
+        user_agent=dataInfo.User_Agent,
+        store_token=dataInfo.store_token,
+        proxy_config=proxyInfo.url)
 
     # refresh 버퍼에 추가
     async with dataInfo.refresh_buf_lock:
