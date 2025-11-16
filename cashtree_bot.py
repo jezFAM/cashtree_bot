@@ -3731,8 +3731,8 @@ async def get_store_answer(store_url, cnt, interval, pattern):
                         asyncio.create_task(
                             writelog(f'get_store_answer : {store_url}\n{msg}', False))
                         break
-                    elif response.status_code == 490 and not token_updated:
-                        # Store token 업데이트 필요 (첫 번째 시도만)
+                    elif response.status_code in [403, 490] and not token_updated:
+                        # Store token 업데이트 필요 (첫 번째 시도만) - 403 또는 490
                         try:
                             # ini 파일에서 새로운 토큰 읽기
                             config = configparser.ConfigParser()
@@ -3753,19 +3753,19 @@ async def get_store_answer(store_url, cnt, interval, pattern):
                                     client.update_user_agent(new_user_agent)
                                     dataInfo.user_agent = new_user_agent  # 전역 상태도 업데이트
                                     token_updated = True
-                                    msg = f'User Agent updated due to 490 status code: {store_url}'
+                                    msg = f'User Agent updated due to {response.status_code} status code: {store_url}'
                                     asyncio.create_task(writelog(msg, False))
                                 if new_store_token != client.store_token:
                                     client.update_store_token(new_store_token)
                                     dataInfo.store_token = new_store_token  # 전역 상태도 업데이트
                                     token_updated = True
-                                    msg = f'Store token updated due to 490 status code: {store_url}'
+                                    msg = f'Store token updated due to {response.status_code} status code: {store_url}'
                                     asyncio.create_task(writelog(msg, False))
                                 try_count += 1
                                 await asyncio.sleep(1)  # 잠시 대기 후 재시도
                                 continue
                             else:
-                                msg = f'User Agent and token already updated but still getting 490: {store_url}'
+                                msg = f'User Agent and token already updated but still getting {response.status_code}: {store_url}'
                                 asyncio.create_task(writelog(msg, False))
                                 break
 
@@ -3773,9 +3773,9 @@ async def get_store_answer(store_url, cnt, interval, pattern):
                             msg = f'get_store_answer : {store_url} : {response.status_code} error'
                             asyncio.create_task(writelog(msg, False))
                             break
-                    elif response.status_code == 490 and token_updated:
-                        # 이미 토큰을 업데이트했지만 여전히 490이면 종료
-                        msg = f'Store token already updated but still getting 490: {store_url}'
+                    elif response.status_code in [403, 490] and token_updated:
+                        # 이미 토큰을 업데이트했지만 여전히 403/490이면 종료
+                        msg = f'Store token already updated but still getting {response.status_code}: {store_url}'
                         asyncio.create_task(writelog(msg, False))
                         break
                     elif 500 <= response.status_code < 600:
