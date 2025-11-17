@@ -4152,8 +4152,6 @@ async def get_store_answer(store_url, cnt, interval, pattern):
         isSuccess = False
         try_count = 0  # 시도 횟수를 카운트하기 위한 변수
         token_updated = False  # 토큰 업데이트 플래그
-        retry_429_count = 0  # 429 재시도 횟수
-        max_429_retries = 3  # 429 최대 재시도 횟수
         with tqdm(total=100, desc=primary_key, leave=False, dynamic_ncols=True) as progress_bar:
             while try_count < 3:
                 try:
@@ -4174,21 +4172,10 @@ async def get_store_answer(store_url, cnt, interval, pattern):
                             writelog(f'Applied {len(browser_cookies)} cookies from Playwright to httpx client for {store_url}', False))
 
                     if status_code == 429:
-                        # 429 Too Many Requests - exponential backoff로 재시도
-                        retry_429_count += 1
-                        if retry_429_count <= max_429_retries:
-                            import random
-                            # Exponential backoff: 2^retry * base_delay + random jitter
-                            base_delay = 30  # 30초 기본 대기
-                            wait_time = (2 ** retry_429_count) * base_delay + random.uniform(0, 10)
-                            asyncio.create_task(
-                                writelog(f'get_store_answer : {store_url} - 429 Too Many Requests (retry {retry_429_count}/{max_429_retries}, waiting {wait_time:.1f}s)', False))
-                            await asyncio.sleep(wait_time)
-                            continue  # 재시도
-                        else:
-                            asyncio.create_task(
-                                writelog(f'get_store_answer : {store_url} - 429 Too Many Requests (max retries exceeded)', False))
-                            break
+                        # 429 Too Many Requests
+                        asyncio.create_task(
+                            writelog(f'get_store_answer : {store_url} - 429 Too Many Requests', False))
+                        break
                     elif status_code == 490 and not token_updated:
                         # Store token 업데이트 필요 (첫 번째 시도만)
                         try:
@@ -4244,10 +4231,6 @@ async def get_store_answer(store_url, cnt, interval, pattern):
                         asyncio.create_task(
                             writelog(f'get_store_answer : {store_url} : {status_code} status code (expected 200)', False))
                         break
-
-                    # 성공적으로 200 응답을 받았으므로 429 재시도 카운터 리셋
-                    retry_429_count = 0
-
                     # html 변수는 이미 fetch_with_playwright에서 받아옴
                     store_info = extract_key_values_from_script(html)
                     if not bool(store_info):
