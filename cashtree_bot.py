@@ -3860,14 +3860,17 @@ async def fetch_with_playwright(url: str, user_agent: str = None, cookies: Dict 
         async with async_playwright() as p:
             # Chromium 브라우저 시작
             browser = await p.chromium.launch(
-                headless=True,  # headless 모드 사용
+                headless=True,  # headless 모드 사용 (Chrome 109+는 감지하기 어려운 새로운 headless 구현)
                 args=[
                     '--disable-blink-features=AutomationControlled',  # 자동화 감지 비활성화
                     '--no-sandbox',
                     '--disable-setuid-sandbox',
                     '--disable-dev-shm-usage',  # /dev/shm 파티션 사용 비활성화
-                    '--disable-accelerated-2d-canvas',  # 2D 캔버스 가속 비활성화
-                    '--disable-gpu',  # GPU 가속 비활성화
+                    # Canvas/WebGL 가속 활성화 (비활성화하면 fingerprinting으로 감지됨)
+                    '--enable-webgl',
+                    '--use-gl=swiftshader',  # 소프트웨어 GL 사용 (서버 환경에서 GPU 없이도 WebGL 가능)
+                    '--disable-features=IsolateOrigins,site-per-process',  # 일부 봇 감지 우회
+                    '--disable-blink-features=AutomationControlled',
                     # '--single-process' 제거: 단일 프로세스 모드는 불안정하여 브라우저 크래시 유발
                 ]
             )
@@ -3971,17 +3974,78 @@ async def fetch_with_playwright(url: str, user_agent: str = None, cookies: Dict 
                         saveData: false
                     })
                 });
+
+                // Canvas Fingerprinting 방어 (노이즈 추가)
+                const originalToDataURL = HTMLCanvasElement.prototype.toDataURL;
+                const originalToBlob = HTMLCanvasElement.prototype.toBlob;
+                const originalGetImageData = CanvasRenderingContext2D.prototype.getImageData;
+
+                // Canvas toDataURL 노이즈 추가
+                HTMLCanvasElement.prototype.toDataURL = function() {
+                    const context = this.getContext('2d');
+                    if (context) {
+                        const imageData = context.getImageData(0, 0, this.width, this.height);
+                        for (let i = 0; i < imageData.data.length; i += 4) {
+                            imageData.data[i] = imageData.data[i] ^ Math.floor(Math.random() * 2);
+                        }
+                        context.putImageData(imageData, 0, 0);
+                    }
+                    return originalToDataURL.apply(this, arguments);
+                };
+
+                // WebGL Fingerprinting 방어
+                const getParameter = WebGLRenderingContext.prototype.getParameter;
+                WebGLRenderingContext.prototype.getParameter = function(parameter) {
+                    // UNMASKED_VENDOR_WEBGL
+                    if (parameter === 37445) {
+                        return 'Intel Inc.';
+                    }
+                    // UNMASKED_RENDERER_WEBGL
+                    if (parameter === 37446) {
+                        return 'Intel Iris OpenGL Engine';
+                    }
+                    return getParameter.apply(this, arguments);
+                };
+
+                // AudioContext Fingerprinting 방어
+                const audioContext = window.AudioContext || window.webkitAudioContext;
+                if (audioContext) {
+                    const OriginalAudioContext = audioContext;
+                    window.AudioContext = function() {
+                        const context = new OriginalAudioContext();
+                        const originalCreateOscillator = context.createOscillator;
+                        context.createOscillator = function() {
+                            const oscillator = originalCreateOscillator.apply(context, arguments);
+                            const originalStart = oscillator.start;
+                            oscillator.start = function() {
+                                // 약간의 노이즈 추가
+                                arguments[0] = arguments[0] + Math.random() * 0.0001;
+                                return originalStart.apply(oscillator, arguments);
+                            };
+                            return oscillator;
+                        };
+                        return context;
+                    };
+                }
             """)
 
             # 먼저 네이버 메인 페이지 방문 (정상 사용자 행동 모방)
             try:
                 await page.goto('https://www.naver.com', wait_until='domcontentloaded', timeout=30000)
-                await page.wait_for_timeout(1000)  # 1초 대기
+                await page.wait_for_timeout(2000)  # 2초 대기 (증가)
 
-                # 마우스 움직임 시뮬레이션 (정상 사용자 행동)
-                await page.mouse.move(100, 100)
-                await page.mouse.move(200, 200)
-                await page.wait_for_timeout(500)
+                # 더 자연스러운 마우스 움직임 시뮬레이션
+                import random
+                for _ in range(3):
+                    x = random.randint(100, 800)
+                    y = random.randint(100, 600)
+                    await page.mouse.move(x, y)
+                    await page.wait_for_timeout(random.randint(200, 500))
+
+                # 스크롤 시뮬레이션 (정상 사용자는 페이지를 스크롤함)
+                await page.evaluate('window.scrollBy(0, window.innerHeight / 2)')
+                await page.wait_for_timeout(random.randint(500, 1000))
+
             except Exception as e:
                 # 메인 페이지 로드 실패해도 계속 진행 (단, CancelledError는 재발생)
                 if isinstance(e, asyncio.CancelledError):
@@ -4013,6 +4077,17 @@ async def fetch_with_playwright(url: str, user_agent: str = None, cookies: Dict 
                 if status_code == 200:
                     # 추가 대기 (동적 콘텐츠 로드)
                     await page.wait_for_timeout(3000)  # 3초 대기
+
+                    # 타겟 페이지에서도 인간처럼 행동
+                    import random
+                    # 스크롤 시뮬레이션
+                    for _ in range(2):
+                        await page.evaluate('window.scrollBy(0, window.innerHeight / 3)')
+                        await page.wait_for_timeout(random.randint(500, 1000))
+
+                    # 마우스 움직임
+                    await page.mouse.move(random.randint(300, 700), random.randint(300, 700))
+                    await page.wait_for_timeout(random.randint(500, 1000))
 
                     # HTML 콘텐츠 가져오기
                     html_content = await page.content()
@@ -4062,6 +4137,8 @@ async def get_store_answer(store_url, cnt, interval, pattern):
         isSuccess = False
         try_count = 0  # 시도 횟수를 카운트하기 위한 변수
         token_updated = False  # 토큰 업데이트 플래그
+        retry_429_count = 0  # 429 재시도 횟수
+        max_429_retries = 3  # 429 최대 재시도 횟수
         with tqdm(total=100, desc=primary_key, leave=False, dynamic_ncols=True) as progress_bar:
             while try_count < 3:
                 try:
@@ -4082,10 +4159,21 @@ async def get_store_answer(store_url, cnt, interval, pattern):
                             writelog(f'Applied {len(browser_cookies)} cookies from Playwright to httpx client for {store_url}', False))
 
                     if status_code == 429:
-                        # 429 Too Many Requests
-                        asyncio.create_task(
-                            writelog(f'get_store_answer : {store_url} - 429 Too Many Requests', False))
-                        break
+                        # 429 Too Many Requests - exponential backoff로 재시도
+                        retry_429_count += 1
+                        if retry_429_count <= max_429_retries:
+                            import random
+                            # Exponential backoff: 2^retry * base_delay + random jitter
+                            base_delay = 30  # 30초 기본 대기
+                            wait_time = (2 ** retry_429_count) * base_delay + random.uniform(0, 10)
+                            asyncio.create_task(
+                                writelog(f'get_store_answer : {store_url} - 429 Too Many Requests (retry {retry_429_count}/{max_429_retries}, waiting {wait_time:.1f}s)', False))
+                            await asyncio.sleep(wait_time)
+                            continue  # 재시도
+                        else:
+                            asyncio.create_task(
+                                writelog(f'get_store_answer : {store_url} - 429 Too Many Requests (max retries exceeded)', False))
+                            break
                     elif status_code == 490 and not token_updated:
                         # Store token 업데이트 필요 (첫 번째 시도만)
                         try:
@@ -4141,6 +4229,10 @@ async def get_store_answer(store_url, cnt, interval, pattern):
                         asyncio.create_task(
                             writelog(f'get_store_answer : {store_url} : {status_code} status code (expected 200)', False))
                         break
+
+                    # 성공적으로 200 응답을 받았으므로 429 재시도 카운터 리셋
+                    retry_429_count = 0
+
                     # html 변수는 이미 fetch_with_playwright에서 받아옴
                     store_info = extract_key_values_from_script(html)
                     if not bool(store_info):
