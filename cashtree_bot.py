@@ -3845,32 +3845,28 @@ def extract_key_values_from_script(html_content):
 
 async def fetch_with_playwright(url: str, user_agent: str = None, cookies: Dict = None) -> Tuple[str, int, List[Dict]]:
     """
-    Playwright를 사용하여 URL을 가져옵니다. 네이버의 봇 감지를 우회하기 위한 다양한 기법을 사용합니다.
+    Playwright를 사용하여 URL을 가져옵니다. 최소한의 수정으로 자연스러운 브라우저 동작을 시뮬레이션합니다.
 
     Args:
         url: 가져올 URL
-        user_agent: 사용할 User-Agent (None이면 기본값 사용)
+        user_agent: 사용할 User-Agent (None이면 Playwright 자동 생성)
         cookies: 설정할 쿠키들
 
     Returns:
         Tuple[str, int, List[Dict]]: (HTML 콘텐츠, HTTP 상태 코드, 브라우저 쿠키 리스트)
     """
+    import random
+
     try:
         async with async_playwright() as p:
-            # Chromium 브라우저 시작
+            # Chromium 브라우저 시작 (최소한의 플래그만 사용)
             browser = await p.chromium.launch(
-                headless=True,  # headless 모드 사용 (Chrome 109+는 감지하기 어려운 새로운 headless 구현)
+                headless=True,
                 args=[
                     '--disable-blink-features=AutomationControlled',  # 자동화 감지 비활성화
                     '--no-sandbox',
                     '--disable-setuid-sandbox',
-                    '--disable-dev-shm-usage',  # /dev/shm 파티션 사용 비활성화
-                    # Canvas/WebGL 가속 활성화 (비활성화하면 fingerprinting으로 감지됨)
-                    '--enable-webgl',
-                    '--use-gl=swiftshader',  # 소프트웨어 GL 사용 (서버 환경에서 GPU 없이도 WebGL 가능)
-                    '--disable-features=IsolateOrigins,site-per-process',  # 일부 봇 감지 우회
-                    '--disable-blink-features=AutomationControlled',
-                    # '--single-process' 제거: 단일 프로세스 모드는 불안정하여 브라우저 크래시 유발
+                    '--disable-dev-shm-usage',
                 ]
             )
 
@@ -3904,156 +3900,22 @@ async def fetch_with_playwright(url: str, user_agent: str = None, cookies: Dict 
             # 페이지 생성
             page = await context.new_page()
 
-            # WebDriver 속성 제거 및 다양한 봇 감지 우회
+            # 최소한의 WebDriver 속성 제거만 수행 (과도한 조작은 오히려 의심스러움)
             await page.add_init_script("""
                 // WebDriver 속성 제거
                 Object.defineProperty(navigator, 'webdriver', {
                     get: () => undefined
                 });
 
-                // navigator.webdriver 완전 삭제
-                delete navigator.__proto__.webdriver;
-
-                // Chrome 객체 추가
+                // Chrome 객체 추가 (실제 Chrome에 존재)
                 window.chrome = {
-                    runtime: {},
-                    loadTimes: function() {},
-                    csi: function() {},
-                    app: {}
+                    runtime: {}
                 };
-
-                // Permissions 덮어쓰기
-                const originalQuery = window.navigator.permissions.query;
-                window.navigator.permissions.query = (parameters) => (
-                    parameters.name === 'notifications' ?
-                        Promise.resolve({ state: Notification.permission }) :
-                        originalQuery(parameters)
-                );
-
-                // Plugins 설정 (실제와 유사하게)
-                Object.defineProperty(navigator, 'plugins', {
-                    get: () => [
-                        {name: 'Chrome PDF Plugin', description: 'Portable Document Format', filename: 'internal-pdf-viewer'},
-                        {name: 'Chrome PDF Viewer', description: '', filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai'},
-                        {name: 'Native Client', description: '', filename: 'internal-nacl-plugin'}
-                    ]
-                });
-
-                // Languages 설정
-                Object.defineProperty(navigator, 'languages', {
-                    get: () => ['ko-KR', 'ko', 'en-US', 'en']
-                });
-
-                // Platform 설정
-                Object.defineProperty(navigator, 'platform', {
-                    get: () => 'Win32'
-                });
-
-                // Vendor 설정
-                Object.defineProperty(navigator, 'vendor', {
-                    get: () => 'Google Inc.'
-                });
-
-                // Hardware Concurrency
-                Object.defineProperty(navigator, 'hardwareConcurrency', {
-                    get: () => 8
-                });
-
-                // Device Memory
-                Object.defineProperty(navigator, 'deviceMemory', {
-                    get: () => 8
-                });
-
-                // Connection
-                Object.defineProperty(navigator, 'connection', {
-                    get: () => ({
-                        effectiveType: '4g',
-                        rtt: 50,
-                        downlink: 10,
-                        saveData: false
-                    })
-                });
-
-                // Canvas Fingerprinting 방어 (노이즈 추가)
-                const originalToDataURL = HTMLCanvasElement.prototype.toDataURL;
-                const originalToBlob = HTMLCanvasElement.prototype.toBlob;
-                const originalGetImageData = CanvasRenderingContext2D.prototype.getImageData;
-
-                // Canvas toDataURL 노이즈 추가
-                HTMLCanvasElement.prototype.toDataURL = function() {
-                    const context = this.getContext('2d');
-                    if (context) {
-                        const imageData = context.getImageData(0, 0, this.width, this.height);
-                        for (let i = 0; i < imageData.data.length; i += 4) {
-                            imageData.data[i] = imageData.data[i] ^ Math.floor(Math.random() * 2);
-                        }
-                        context.putImageData(imageData, 0, 0);
-                    }
-                    return originalToDataURL.apply(this, arguments);
-                };
-
-                // WebGL Fingerprinting 방어
-                const getParameter = WebGLRenderingContext.prototype.getParameter;
-                WebGLRenderingContext.prototype.getParameter = function(parameter) {
-                    // UNMASKED_VENDOR_WEBGL
-                    if (parameter === 37445) {
-                        return 'Intel Inc.';
-                    }
-                    // UNMASKED_RENDERER_WEBGL
-                    if (parameter === 37446) {
-                        return 'Intel Iris OpenGL Engine';
-                    }
-                    return getParameter.apply(this, arguments);
-                };
-
-                // AudioContext Fingerprinting 방어
-                const audioContext = window.AudioContext || window.webkitAudioContext;
-                if (audioContext) {
-                    const OriginalAudioContext = audioContext;
-                    window.AudioContext = function() {
-                        const context = new OriginalAudioContext();
-                        const originalCreateOscillator = context.createOscillator;
-                        context.createOscillator = function() {
-                            const oscillator = originalCreateOscillator.apply(context, arguments);
-                            const originalStart = oscillator.start;
-                            oscillator.start = function() {
-                                // 약간의 노이즈 추가
-                                arguments[0] = arguments[0] + Math.random() * 0.0001;
-                                return originalStart.apply(oscillator, arguments);
-                            };
-                            return oscillator;
-                        };
-                        return context;
-                    };
-                }
             """)
 
-            # 먼저 네이버 메인 페이지 방문 (정상 사용자 행동 모방)
+            # 페이지 로드 (직접 접속이 더 자연스러움)
             try:
-                await page.goto('https://www.naver.com', wait_until='domcontentloaded', timeout=30000)
-                await page.wait_for_timeout(2000)  # 2초 대기 (증가)
-
-                # 더 자연스러운 마우스 움직임 시뮬레이션
-                import random
-                for _ in range(3):
-                    x = random.randint(100, 800)
-                    y = random.randint(100, 600)
-                    await page.mouse.move(x, y)
-                    await page.wait_for_timeout(random.randint(200, 500))
-
-                # 스크롤 시뮬레이션 (정상 사용자는 페이지를 스크롤함)
-                await page.evaluate('window.scrollBy(0, window.innerHeight / 2)')
-                await page.wait_for_timeout(random.randint(500, 1000))
-
-            except Exception as e:
-                # 메인 페이지 로드 실패해도 계속 진행 (단, CancelledError는 재발생)
-                if isinstance(e, asyncio.CancelledError):
-                    raise
-                pass
-
-            # 페이지 로드 (타임아웃 60초) with Referer 헤더
-            try:
-                response = await page.goto(url, wait_until='domcontentloaded', timeout=60000, referer='https://www.naver.com/')
+                response = await page.goto(url, wait_until='domcontentloaded', timeout=60000)
                 status_code = response.status if response else 0
 
                 # 디버깅: HTTP 상태 코드 및 Set-Cookie 헤더 로그
@@ -4088,18 +3950,7 @@ async def fetch_with_playwright(url: str, user_agent: str = None, cookies: Dict 
             try:
                 if status_code == 200:
                     # 추가 대기 (동적 콘텐츠 로드)
-                    await page.wait_for_timeout(3000)  # 3초 대기
-
-                    # 타겟 페이지에서도 인간처럼 행동
-                    import random
-                    # 스크롤 시뮬레이션
-                    for _ in range(2):
-                        await page.evaluate('window.scrollBy(0, window.innerHeight / 3)')
-                        await page.wait_for_timeout(random.randint(500, 1000))
-
-                    # 마우스 움직임
-                    await page.mouse.move(random.randint(300, 700), random.randint(300, 700))
-                    await page.wait_for_timeout(random.randint(500, 1000))
+                    await page.wait_for_timeout(random.randint(1000, 2000))
 
                     # HTML 콘텐츠 가져오기
                     html_content = await page.content()
