@@ -1263,21 +1263,14 @@ class BrowserLikeClient:
             raise ValueError(f"알 수 없는 프록시 타입: {self.config.proxy_type}")
 
     def _get_default_headers(self, url, is_xhr=False):
-        """기본 헤더 생성"""
+        """기본 헤더 생성 (최소한의 헤더만 설정, httpx/http2가 나머지 자동 생성)"""
         headers = {
             'User-Agent': self.user_agent,
             'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
             'Accept-Language': 'ko-KR,ko;q=0.8,en-US;q=0.5,en;q=0.3',
-            'Accept-Encoding': 'gzip, deflate, br, zstd',
-            'Connection': 'keep-alive',
-            'Cache-Control': 'no-cache',
-            'Pragma': 'no-cache',
-            'Sec-Fetch-Dest': 'document',
-            'Sec-Fetch-Mode': 'navigate',
-            'Sec-Fetch-Site': 'same-origin',
-            'Sec-Fetch-User': '?1',
-            'Priority': 'u=0, i',
-            'Upgrade-Insecure-Requests': '1',
+            'Accept-Encoding': 'gzip, deflate, br',  # zstd 제거 (일부 브라우저만 지원)
+            # Connection, Cache-Control, Pragma 제거 - HTTP/2가 자동 처리
+            # Sec-Fetch-* 헤더 제거 - httpx가 자동 생성하는 것이 더 자연스러움
         }
 
         # AJAX/XHR 요청인 경우 헤더 조정
@@ -1285,22 +1278,18 @@ class BrowserLikeClient:
             headers.update({
                 'Accept': 'application/json, text/plain, */*',
                 'X-Requested-With': 'XMLHttpRequest',
-                'referer': 'https://brand.naver.com/sisem/products/2237948335',
-                'Sec-Fetch-Dest': 'empty',
-                'Sec-Fetch-Mode': 'cors',
-                'TE': 'trailers'
+                # 하드코딩된 referer 제거 - 동적으로 설정되어야 함
             })
 
-        # URL 파싱하여 Host, Origin 설정 (모든 요청에 적용하는 것이 좋음)
+        # URL 파싱 (쿠키 설정에 사용)
         parsed_url = urllib.parse.urlparse(url)
         hostname = parsed_url.netloc  # 예: 'brand.naver.com' 또는 'www.google.com'
         scheme = parsed_url.scheme    # 예: 'https'
 
-        if hostname:
-            headers['Host'] = hostname  # Host 헤더는 항상 포함하는 것이 좋음
-        if is_xhr and scheme and hostname:  # CORS 관련 헤더는 XHR 시 주로 필요
+        # Host, Origin 헤더는 httpx가 자동으로 설정 (수동 설정은 오히려 의심스러움)
+        # XHR 요청의 경우에만 필요한 헤더를 추가
+        if is_xhr and scheme and hostname:
             headers['Origin'] = f"{scheme}://{hostname}"
-            # Referer도 필요시 설정 (예: headers['Referer'] = url)
 
         # --- 도메인 조건부 쿠키 설정 로직 ---
 
@@ -4028,6 +4017,25 @@ async def get_store_answer(store_url, cnt, interval, pattern):
                         client.cookie_manager.set_cookies_from_playwright(browser_cookies, store_url)
                         asyncio.create_task(
                             writelog(f'Applied {len(browser_cookies)} cookies from Playwright to httpx client for {store_url}', False))
+                    else:
+                        # Playwright에서 쿠키를 받지 못한 경우 ini 설정의 쿠키를 fallback으로 사용
+                        asyncio.create_task(
+                            writelog(f'[Fallback] No cookies from Playwright, using ini config cookies for {store_url}', False))
+                        # ini 쿠키를 Playwright 형식으로 변환하여 CookieManager에 추가
+                        fallback_cookies = []
+                        if dataInfo.store_nnb:
+                            fallback_cookies.append({'name': 'NNB', 'value': dataInfo.store_nnb, 'domain': '.naver.com', 'path': '/'})
+                        if dataInfo.store_fwb:
+                            fallback_cookies.append({'name': '_fwb', 'value': dataInfo.store_fwb, 'domain': '.naver.com', 'path': '/'})
+                        if dataInfo.store_buc:
+                            fallback_cookies.append({'name': 'BUC', 'value': dataInfo.store_buc, 'domain': '.naver.com', 'path': '/'})
+                        if dataInfo.store_token:
+                            fallback_cookies.append({'name': 'X-Wtm-Cpt-Tk', 'value': dataInfo.store_token, 'domain': '.naver.com', 'path': '/'})
+
+                        if fallback_cookies:
+                            client.cookie_manager.set_cookies_from_playwright(fallback_cookies, store_url)
+                            asyncio.create_task(
+                                writelog(f'Applied {len(fallback_cookies)} fallback cookies from ini config', False))
 
                     if status_code == 429:
                         # 429 Too Many Requests
@@ -4121,10 +4129,13 @@ async def get_store_answer(store_url, cnt, interval, pattern):
 
         return list(dict.fromkeys(answer_list)), isSuccess
 
-    # BrowserLikeClient 생성 (Playwright가 쿠키를 제공하므로 store_token만 필요)
+    # BrowserLikeClient 생성 (Playwright 쿠키 + ini fallback)
     client = BrowserLikeClient(
         user_agent=dataInfo.User_Agent,
         store_token=dataInfo.store_token,
+        store_nnb=dataInfo.store_nnb,
+        store_fwb=dataInfo.store_fwb,
+        store_buc=dataInfo.store_buc,
         proxy_config=proxyInfo.url)
 
     # refresh 버퍼에 추가
