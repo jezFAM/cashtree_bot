@@ -3900,6 +3900,13 @@ async def fetch_with_playwright(url: str, user_agent: str = None, cookies: Dict 
             # 쿠키 설정
             if cookies:
                 await context.add_cookies(cookies)
+                # 디버깅: Playwright에 전달하는 쿠키 로그
+                cookie_names = [c['name'] for c in cookies]
+                asyncio.create_task(
+                    writelog(f'[Playwright Request] Sending {len(cookies)} cookies to {url}: {cookie_names}', False))
+            else:
+                asyncio.create_task(
+                    writelog(f'[Playwright Request] No cookies sent to {url}', False))
 
             # 페이지 생성
             page = await context.new_page()
@@ -4055,6 +4062,19 @@ async def fetch_with_playwright(url: str, user_agent: str = None, cookies: Dict 
             try:
                 response = await page.goto(url, wait_until='domcontentloaded', timeout=60000, referer='https://www.naver.com/')
                 status_code = response.status if response else 0
+
+                # 디버깅: HTTP 상태 코드 및 Set-Cookie 헤더 로그
+                asyncio.create_task(
+                    writelog(f'[Playwright Response] HTTP {status_code} from {url}', False))
+
+                # 429 에러 시 응답 헤더 확인
+                if status_code == 429 and response:
+                    headers_log = {}
+                    for key in ['set-cookie', 'server', 'x-frame-options', 'content-type']:
+                        if response.headers.get(key):
+                            headers_log[key] = response.headers.get(key)
+                    asyncio.create_task(
+                        writelog(f'[Playwright 429] Response headers: {headers_log}', False))
             except Exception as e:
                 # 페이지 로드 실패 (타임아웃, 네트워크 오류 등)
                 asyncio.create_task(writelog(f'fetch_with_playwright: Failed to load {url}: {str(e)}', False))
@@ -4095,6 +4115,15 @@ async def fetch_with_playwright(url: str, user_agent: str = None, cookies: Dict 
 
                 # 브라우저에서 쿠키 가져오기 (API 요청에 사용하기 위해)
                 browser_cookies = await context.cookies()
+
+                # 디버깅: Playwright가 받은 쿠키 로그
+                if browser_cookies:
+                    cookie_info = {c['name']: c['value'][:20] + '...' if len(c['value']) > 20 else c['value'] for c in browser_cookies}
+                    asyncio.create_task(
+                        writelog(f'[Playwright Response] Received {len(browser_cookies)} cookies from {url}: {list(cookie_info.keys())}', False))
+                else:
+                    asyncio.create_task(
+                        writelog(f'[Playwright Response] No cookies received from {url}', False))
             except Exception as e:
                 # 브라우저가 크래시되었거나 페이지가 닫힌 경우
                 asyncio.create_task(writelog(f'fetch_with_playwright: Browser error while processing {url}: {str(e)}', False))
