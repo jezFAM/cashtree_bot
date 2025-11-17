@@ -3874,27 +3874,14 @@ async def fetch_with_playwright(url: str, user_agent: str = None, cookies: Dict 
                 ]
             )
 
-            # 컨텍스트 생성
+            # 컨텍스트 생성 (최소한의 설정으로 자연스럽게)
             context = await browser.new_context(
                 viewport={'width': 1920, 'height': 1080},
                 user_agent=user_agent if user_agent else 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                 locale='ko-KR',
                 timezone_id='Asia/Seoul',
-                permissions=[],
-                ignore_https_errors=True,  # SSL 인증서 오류 무시
-                extra_http_headers={
-                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
-                    'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
-                    'Accept-Encoding': 'gzip, deflate, br',
-                    'DNT': '1',
-                    'Connection': 'keep-alive',
-                    'Upgrade-Insecure-Requests': '1',
-                    'Sec-Fetch-Dest': 'document',
-                    'Sec-Fetch-Mode': 'navigate',
-                    'Sec-Fetch-Site': 'none',
-                    'Sec-Fetch-User': '?1',
-                    'Cache-Control': 'max-age=0',
-                }
+                # Playwright가 자동으로 올바른 헤더를 생성하도록 extra_http_headers 제거
+                # ignore_https_errors도 제거 (일반 사용자는 SSL 오류를 무시하지 않음)
             )
 
             # 쿠키 설정
