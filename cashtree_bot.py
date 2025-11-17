@@ -1115,6 +1115,36 @@ class CookieManager:
             if 'name' in cookie and 'value' in cookie:
                 self.domain_cookies[domain][cookie['name']] = cookie['value']
 
+    def get_cookies_for_playwright(self, url: str) -> List[Dict]:
+        """저장된 쿠키를 Playwright 형식으로 변환하여 반환합니다
+
+        Args:
+            url: 쿠키를 가져올 URL
+
+        Returns:
+            Playwright 형식의 쿠키 리스트
+            예: [{'name': 'NNB', 'value': 'xxx', 'domain': '.naver.com', 'path': '/'}, ...]
+        """
+        domain = self.extract_domain(url)
+        cookies = self.get_cookies_for_url(url)
+
+        if not cookies:
+            return []
+
+        playwright_cookies = []
+        for name, value in cookies.items():
+            playwright_cookies.append({
+                'name': name,
+                'value': value,
+                'domain': f'.{domain}',  # .naver.com 형식 (서브도메인에서도 사용 가능)
+                'path': '/',
+                'httpOnly': False,
+                'secure': True,
+                'sameSite': 'Lax'
+            })
+
+        return playwright_cookies
+
 
 class BrowserLikeClient:
     """실제 브라우저와 유사하게 동작하는 HTTP 클라이언트"""
@@ -1441,6 +1471,89 @@ class BrowserLikeClient:
         self.cookie_manager.update_from_response(response, url)
 
         return response
+
+    def get_playwright_cookies(self, url: str) -> List[Dict]:
+        """Playwright에 전달할 쿠키를 생성합니다
+
+        CookieManager의 쿠키와 초기 쿠키(store_nnb, store_fwb, store_buc)를 결합하여
+        Playwright 형식으로 반환합니다.
+
+        Args:
+            url: 쿠키를 가져올 URL
+
+        Returns:
+            Playwright 형식의 쿠키 리스트
+        """
+        # CookieManager에서 기존 쿠키 가져오기
+        playwright_cookies = self.cookie_manager.get_cookies_for_playwright(url)
+
+        # 도메인 확인
+        parsed_url = urllib.parse.urlparse(url)
+        hostname = parsed_url.netloc
+        is_naver_domain = hostname.endswith('.naver.com') or hostname == 'naver.com'
+
+        if is_naver_domain:
+            # 기존 쿠키 이름 목록
+            existing_cookie_names = {cookie['name'] for cookie in playwright_cookies}
+
+            # 초기 쿠키 추가 (중복되지 않은 경우만)
+            if self.store_nnb and 'NNB' not in existing_cookie_names:
+                playwright_cookies.append({
+                    'name': 'NNB',
+                    'value': self.store_nnb,
+                    'domain': '.naver.com',
+                    'path': '/',
+                    'httpOnly': False,
+                    'secure': True,
+                    'sameSite': 'Lax'
+                })
+
+            if self.store_fwb and '_fwb' not in existing_cookie_names:
+                playwright_cookies.append({
+                    'name': '_fwb',
+                    'value': self.store_fwb,
+                    'domain': '.naver.com',
+                    'path': '/',
+                    'httpOnly': False,
+                    'secure': True,
+                    'sameSite': 'Lax'
+                })
+
+            if self.store_buc and 'BUC' not in existing_cookie_names:
+                playwright_cookies.append({
+                    'name': 'BUC',
+                    'value': self.store_buc,
+                    'domain': '.naver.com',
+                    'path': '/',
+                    'httpOnly': True,
+                    'secure': True,
+                    'sameSite': 'Lax'
+                })
+
+            if self.store_token and 'X-Wtm-Cpt-Tk' not in existing_cookie_names:
+                playwright_cookies.append({
+                    'name': 'X-Wtm-Cpt-Tk',
+                    'value': self.store_token,
+                    'domain': '.naver.com',
+                    'path': '/',
+                    'httpOnly': False,
+                    'secure': True,
+                    'sameSite': 'Lax'
+                })
+
+            # ba.uuid 쿠키 추가 (항상)
+            if 'ba.uuid' not in existing_cookie_names:
+                playwright_cookies.append({
+                    'name': 'ba.uuid',
+                    'value': '0',
+                    'domain': '.naver.com',
+                    'path': '/',
+                    'httpOnly': False,
+                    'secure': False,
+                    'sameSite': 'Lax'
+                })
+
+        return playwright_cookies
 
     async def close(self):
         """클라이언트 종료"""
@@ -3952,8 +4065,15 @@ async def get_store_answer(store_url, cnt, interval, pattern):
         with tqdm(total=100, desc=primary_key, leave=False, dynamic_ncols=True) as progress_bar:
             while try_count < 3:
                 try:
-                    # Playwright를 사용하여 페이지 가져오기 (봇 감지 우회)
-                    html, status_code, browser_cookies = await fetch_with_playwright(store_url, user_agent=dataInfo.User_Agent)
+                    # BrowserLikeClient의 기존 쿠키를 Playwright 형식으로 가져오기
+                    existing_cookies = client.get_playwright_cookies(store_url)
+
+                    # Playwright를 사용하여 페이지 가져오기 (봇 감지 우회, 기존 쿠키 전달)
+                    html, status_code, browser_cookies = await fetch_with_playwright(
+                        store_url,
+                        user_agent=dataInfo.User_Agent,
+                        cookies=existing_cookies
+                    )
 
                     # Playwright에서 얻은 쿠키를 httpx 클라이언트에 적용 (API 요청 시 사용)
                     if browser_cookies:
