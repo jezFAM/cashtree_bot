@@ -3755,7 +3755,7 @@ async def fetch_with_playwright(url: str, user_agent: str = None, cookies: Dict 
                     '--disable-dev-shm-usage',  # /dev/shm 파티션 사용 비활성화
                     '--disable-accelerated-2d-canvas',  # 2D 캔버스 가속 비활성화
                     '--disable-gpu',  # GPU 가속 비활성화
-                    '--single-process',  # 단일 프로세스 모드
+                    # '--single-process' 제거: 단일 프로세스 모드는 불안정하여 브라우저 크래시 유발
                 ]
             )
 
@@ -3869,28 +3869,54 @@ async def fetch_with_playwright(url: str, user_agent: str = None, cookies: Dict 
                 await page.mouse.move(100, 100)
                 await page.mouse.move(200, 200)
                 await page.wait_for_timeout(500)
-            except:
-                pass  # 메인 페이지 로드 실패해도 계속 진행
+            except Exception as e:
+                # 메인 페이지 로드 실패해도 계속 진행 (단, CancelledError는 재발생)
+                if isinstance(e, asyncio.CancelledError):
+                    raise
+                pass
 
             # 페이지 로드 (타임아웃 60초) with Referer 헤더
-            response = await page.goto(url, wait_until='domcontentloaded', timeout=60000, referer='https://www.naver.com/')
+            try:
+                response = await page.goto(url, wait_until='domcontentloaded', timeout=60000, referer='https://www.naver.com/')
+                status_code = response.status if response else 0
+            except Exception as e:
+                # 페이지 로드 실패 (타임아웃, 네트워크 오류 등)
+                asyncio.create_task(writelog(f'fetch_with_playwright: Failed to load {url}: {str(e)}', False))
+                status_code = 0
+                html_content = ""
+                browser_cookies = []
 
-            status_code = response.status if response else 0
+                try:
+                    await browser.close()
+                except:
+                    pass  # 브라우저가 이미 닫혔을 수 있음
 
-            if status_code == 200:
-                # 추가 대기 (동적 콘텐츠 로드)
-                await page.wait_for_timeout(3000)  # 3초 대기
+                return html_content, status_code, browser_cookies
 
-                # HTML 콘텐츠 가져오기
-                html_content = await page.content()
-            else:
-                html_content = await page.content() if status_code else ""
+            html_content = ""
+            browser_cookies = []
 
-            # 브라우저에서 쿠키 가져오기 (API 요청에 사용하기 위해)
-            browser_cookies = await context.cookies()
+            try:
+                if status_code == 200:
+                    # 추가 대기 (동적 콘텐츠 로드)
+                    await page.wait_for_timeout(3000)  # 3초 대기
+
+                    # HTML 콘텐츠 가져오기
+                    html_content = await page.content()
+                else:
+                    html_content = await page.content() if status_code else ""
+
+                # 브라우저에서 쿠키 가져오기 (API 요청에 사용하기 위해)
+                browser_cookies = await context.cookies()
+            except Exception as e:
+                # 브라우저가 크래시되었거나 페이지가 닫힌 경우
+                asyncio.create_task(writelog(f'fetch_with_playwright: Browser error while processing {url}: {str(e)}', False))
 
             # 브라우저 종료
-            await browser.close()
+            try:
+                await browser.close()
+            except:
+                pass  # 브라우저가 이미 닫혔을 수 있음
 
             return html_content, status_code, browser_cookies
 

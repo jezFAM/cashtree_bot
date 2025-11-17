@@ -34,7 +34,7 @@ async def fetch_with_playwright(url: str, user_agent: str = None) -> Tuple[str, 
                     '--disable-dev-shm-usage',  # /dev/shm 파티션 사용 비활성화
                     '--disable-accelerated-2d-canvas',  # 2D 캔버스 가속 비활성화
                     '--disable-gpu',  # GPU 가속 비활성화
-                    '--single-process',  # 단일 프로세스 모드
+                    # '--single-process' 제거: 단일 프로세스 모드는 불안정하여 브라우저 크래시 유발
                 ]
             )
 
@@ -139,36 +139,66 @@ async def fetch_with_playwright(url: str, user_agent: str = None) -> Tuple[str, 
 
             # 먼저 네이버 메인 페이지 방문 (정상 사용자 행동 모방)
             print(f"🏠 네이버 메인 페이지 방문 중...")
-            await page.goto('https://www.naver.com', wait_until='domcontentloaded', timeout=30000)
-            await page.wait_for_timeout(1000)  # 1초 대기
+            try:
+                await page.goto('https://www.naver.com', wait_until='domcontentloaded', timeout=30000)
+                await page.wait_for_timeout(1000)  # 1초 대기
 
-            # 마우스 움직임 시뮬레이션 (정상 사용자 행동)
-            await page.mouse.move(100, 100)
-            await page.mouse.move(200, 200)
-            await page.wait_for_timeout(500)
+                # 마우스 움직임 시뮬레이션 (정상 사용자 행동)
+                await page.mouse.move(100, 100)
+                await page.mouse.move(200, 200)
+                await page.wait_for_timeout(500)
+            except Exception as e:
+                # 메인 페이지 로드 실패해도 계속 진행 (단, CancelledError는 재발생)
+                if isinstance(e, asyncio.CancelledError):
+                    raise
+                print(f"⚠️  네이버 메인 페이지 로드 실패, 계속 진행: {str(e)}")
 
             print(f"🌐 페이지 로드 중: {url}")
             # Referer 헤더 설정하여 페이지 로드
-            response = await page.goto(url, wait_until='domcontentloaded', timeout=60000, referer='https://www.naver.com/')
+            try:
+                response = await page.goto(url, wait_until='domcontentloaded', timeout=60000, referer='https://www.naver.com/')
+                status_code = response.status if response else 0
+            except Exception as e:
+                # 페이지 로드 실패 (타임아웃, 네트워크 오류 등)
+                print(f"❌ 페이지 로드 실패: {str(e)}")
+                status_code = 0
+                html_content = ""
+                browser_cookies = []
 
-            status_code = response.status if response else 0
+                try:
+                    await browser.close()
+                except:
+                    pass  # 브라우저가 이미 닫혔을 수 있음
+
+                return html_content, status_code, browser_cookies
+
             print(f"📊 HTTP 상태 코드: {status_code}")
 
-            print(f"⏳ 동적 콘텐츠 로딩 대기 중...")
-            # 추가 대기 (동적 콘텐츠 로드)
-            await page.wait_for_timeout(3000)  # 3초 대기
+            html_content = ""
+            browser_cookies = []
 
-            # HTML 콘텐츠 가져오기 (모든 상태 코드에 대해)
-            html_content = await page.content()
+            try:
+                print(f"⏳ 동적 콘텐츠 로딩 대기 중...")
+                # 추가 대기 (동적 콘텐츠 로드)
+                await page.wait_for_timeout(3000)  # 3초 대기
 
-            # 브라우저에서 쿠키 가져오기
-            browser_cookies = await context.cookies()
+                # HTML 콘텐츠 가져오기 (모든 상태 코드에 대해)
+                html_content = await page.content()
 
-            print(f"📄 HTML 길이: {len(html_content)} bytes")
-            print(f"🍪 쿠키 개수: {len(browser_cookies)}")
+                # 브라우저에서 쿠키 가져오기
+                browser_cookies = await context.cookies()
+
+                print(f"📄 HTML 길이: {len(html_content)} bytes")
+                print(f"🍪 쿠키 개수: {len(browser_cookies)}")
+            except Exception as e:
+                # 브라우저가 크래시되었거나 페이지가 닫힌 경우
+                print(f"❌ 브라우저 오류: {str(e)}")
 
             # 브라우저 종료
-            await browser.close()
+            try:
+                await browser.close()
+            except:
+                pass  # 브라우저가 이미 닫혔을 수 있음
 
             return html_content, status_code, browser_cookies
 
