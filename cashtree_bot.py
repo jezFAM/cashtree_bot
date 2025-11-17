@@ -3875,14 +3875,20 @@ async def fetch_with_playwright(url: str, user_agent: str = None, cookies: Dict 
             )
 
             # 컨텍스트 생성 (최소한의 설정으로 자연스럽게)
-            context = await browser.new_context(
-                viewport={'width': 1920, 'height': 1080},
-                user_agent=user_agent if user_agent else 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-                locale='ko-KR',
-                timezone_id='Asia/Seoul',
+            # user_agent를 지정하지 않으면 Playwright가 자동으로 올바른 User-Agent 생성
+            context_options = {
+                'viewport': {'width': 1920, 'height': 1080},
+                'locale': 'ko-KR',
+                'timezone_id': 'Asia/Seoul',
                 # Playwright가 자동으로 올바른 헤더를 생성하도록 extra_http_headers 제거
                 # ignore_https_errors도 제거 (일반 사용자는 SSL 오류를 무시하지 않음)
-            )
+            }
+
+            # user_agent가 명시적으로 전달된 경우만 사용 (None이면 Playwright 자동 생성)
+            if user_agent:
+                context_options['user_agent'] = user_agent
+
+            context = await browser.new_context(**context_options)
 
             # 쿠키 설정
             if cookies:
@@ -4159,9 +4165,10 @@ async def get_store_answer(store_url, cnt, interval, pattern):
                     existing_cookies = client.get_playwright_cookies(store_url)
 
                     # Playwright를 사용하여 페이지 가져오기 (봇 감지 우회, 기존 쿠키 전달)
+                    # user_agent를 전달하지 않아 Playwright가 자동으로 올바른 User-Agent 생성
                     html, status_code, browser_cookies = await fetch_with_playwright(
                         store_url,
-                        user_agent=dataInfo.User_Agent,
+                        user_agent=None,  # Playwright가 자동으로 생성
                         cookies=existing_cookies
                     )
 
