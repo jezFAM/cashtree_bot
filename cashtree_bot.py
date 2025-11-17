@@ -43,7 +43,6 @@ from httpx_socks import AsyncProxyTransport
 from concurrent.futures import ThreadPoolExecutor
 
 from playwright.async_api import async_playwright, Browser, BrowserContext, Page
-from playwright_stealth import Stealth
 
 # 한글깨짐 처리
 os.putenv('NLS_LANG', 'KOREAN_KOREA.KO16KSC5601')
@@ -8655,3 +8654,4 @@ if __name__ == '__main__':
 
     nest_asyncio.apply()
     asyncio.run(main())
+
