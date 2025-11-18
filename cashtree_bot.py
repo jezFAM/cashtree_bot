@@ -3865,9 +3865,18 @@ async def fetch_with_playwright(url: str, user_agent: str = None) -> Tuple[str, 
     try:
         async with async_playwright() as p:
             # 실제 Chrome 바이너리 사용 (더 탐지하기 어려움)
+            browser = None
+
+            # 시스템 Chrome 경로 찾기
+            chrome_paths = [
+                r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+                r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+            ]
+
+            # 먼저 channel='chrome' 시도
             try:
                 browser = await p.chromium.launch(
-                    channel='chrome',  # 실제 Chrome 사용
+                    channel='chrome',
                     headless=True,
                     args=[
                         '--disable-blink-features=AutomationControlled',
@@ -3876,17 +3885,32 @@ async def fetch_with_playwright(url: str, user_agent: str = None) -> Tuple[str, 
                         '--disable-dev-shm-usage',
                     ]
                 )
-            except:
-                # Chrome이 없으면 Chromium 사용
-                browser = await p.chromium.launch(
-                    headless=True,
-                    args=[
-                        '--disable-blink-features=AutomationControlled',
-                        '--no-sandbox',
-                        '--disable-setuid-sandbox',
-                        '--disable-dev-shm-usage',
-                    ]
-                )
+            except Exception as channel_error:
+                # channel='chrome' 실패 시 직접 경로로 시도
+                asyncio.create_task(writelog(f'fetch_with_playwright: channel=chrome failed, trying direct path: {str(channel_error)[:100]}', False))
+
+                for chrome_path in chrome_paths:
+                    if os.path.exists(chrome_path):
+                        try:
+                            browser = await p.chromium.launch(
+                                executable_path=chrome_path,
+                                headless=True,
+                                args=[
+                                    '--disable-blink-features=AutomationControlled',
+                                    '--no-sandbox',
+                                    '--disable-setuid-sandbox',
+                                    '--disable-dev-shm-usage',
+                                ]
+                            )
+                            asyncio.create_task(writelog(f'fetch_with_playwright: Using Chrome at {chrome_path}', False))
+                            break
+                        except Exception as path_error:
+                            asyncio.create_task(writelog(f'fetch_with_playwright: Failed to use Chrome at {chrome_path}: {str(path_error)[:100]}', False))
+                            continue
+
+                # 모든 시도가 실패하면 에러
+                if browser is None:
+                    raise Exception("No Chrome browser found. Please install Google Chrome or ensure PLAYWRIGHT_BROWSERS_PATH is set correctly.")
 
             # 컨텍스트 생성
             context = await browser.new_context(
