@@ -3859,14 +3859,25 @@ async def fetch_with_playwright(url: str, user_agent: str = None, cookies: Dict 
                 ]
             )
 
-            # 컨텍스트 생성 (최소한의 설정으로 자연스럽게)
+            # 컨텍스트 생성 (자연스러운 브라우저 헤더 포함)
             # user_agent를 지정하지 않으면 Playwright가 자동으로 올바른 User-Agent 생성
             context_options = {
                 'viewport': {'width': 1920, 'height': 1080},
                 'locale': 'ko-KR',
                 'timezone_id': 'Asia/Seoul',
-                # Playwright가 자동으로 올바른 헤더를 생성하도록 extra_http_headers 제거
-                # ignore_https_errors도 제거 (일반 사용자는 SSL 오류를 무시하지 않음)
+                'extra_http_headers': {
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+                    'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
+                    'Accept-Encoding': 'gzip, deflate, br',
+                    'DNT': '1',
+                    'Connection': 'keep-alive',
+                    'Upgrade-Insecure-Requests': '1',
+                    'Sec-Fetch-Dest': 'document',
+                    'Sec-Fetch-Mode': 'navigate',
+                    'Sec-Fetch-Site': 'none',
+                    'Sec-Fetch-User': '?1',
+                    'Cache-Control': 'max-age=0',
+                }
             }
 
             # user_agent가 명시적으로 전달된 경우만 사용 (None이면 Playwright 자동 생성)
@@ -3889,20 +3900,92 @@ async def fetch_with_playwright(url: str, user_agent: str = None, cookies: Dict 
             # 페이지 생성
             page = await context.new_page()
 
-            # 최소한의 WebDriver 속성 제거만 수행 (과도한 조작은 오히려 의심스러움)
+            # 봇 감지 우회를 위한 스크립트 추가
             await page.add_init_script("""
                 // WebDriver 속성 제거
                 Object.defineProperty(navigator, 'webdriver', {
                     get: () => undefined
                 });
 
+                // navigator.webdriver 완전 삭제
+                delete navigator.__proto__.webdriver;
+
                 // Chrome 객체 추가 (실제 Chrome에 존재)
                 window.chrome = {
-                    runtime: {}
+                    runtime: {},
+                    loadTimes: function() {},
+                    csi: function() {},
+                    app: {}
+                };
+
+                // Permissions 덮어쓰기
+                const originalQuery = window.navigator.permissions.query;
+                window.navigator.permissions.query = (parameters) => (
+                    parameters.name === 'notifications' ?
+                        Promise.resolve({ state: Notification.permission }) :
+                        originalQuery(parameters)
+                );
+
+                // Plugins 설정 (실제와 유사하게)
+                Object.defineProperty(navigator, 'plugins', {
+                    get: () => [
+                        {name: 'Chrome PDF Plugin', description: 'Portable Document Format', filename: 'internal-pdf-viewer'},
+                        {name: 'Chrome PDF Viewer', description: '', filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai'},
+                        {name: 'Native Client', description: '', filename: 'internal-nacl-plugin'}
+                    ]
+                });
+
+                // Languages 설정
+                Object.defineProperty(navigator, 'languages', {
+                    get: () => ['ko-KR', 'ko', 'en-US', 'en']
+                });
+
+                // Platform 설정
+                Object.defineProperty(navigator, 'platform', {
+                    get: () => 'Win32'
+                });
+
+                // hardwareConcurrency 설정 (CPU 코어 수)
+                Object.defineProperty(navigator, 'hardwareConcurrency', {
+                    get: () => 8
+                });
+
+                // deviceMemory 설정
+                Object.defineProperty(navigator, 'deviceMemory', {
+                    get: () => 8
+                });
+
+                // maxTouchPoints 설정 (터치 미지원)
+                Object.defineProperty(navigator, 'maxTouchPoints', {
+                    get: () => 0
+                });
+
+                // Canvas fingerprinting 우회
+                const originalToDataURL = HTMLCanvasElement.prototype.toDataURL;
+                HTMLCanvasElement.prototype.toDataURL = function(type) {
+                    if (type === 'image/png' && this.width === 16 && this.height === 16) {
+                        return originalToDataURL.apply(this, arguments);
+                    }
+                    return originalToDataURL.apply(this, arguments);
+                };
+
+                // WebGL fingerprinting 우회
+                const getParameter = WebGLRenderingContext.prototype.getParameter;
+                WebGLRenderingContext.prototype.getParameter = function(parameter) {
+                    if (parameter === 37445) {
+                        return 'Intel Inc.';
+                    }
+                    if (parameter === 37446) {
+                        return 'Intel Iris OpenGL Engine';
+                    }
+                    return getParameter.apply(this, arguments);
                 };
             """)
 
-            # 페이지 로드 (직접 접속이 더 자연스러움)
+            # 페이지 로드 전 자연스러운 대기
+            await page.wait_for_timeout(random.randint(500, 1500))
+
+            # 페이지 로드
             try:
                 response = await page.goto(url, wait_until='domcontentloaded', timeout=60000)
                 status_code = response.status if response else 0
@@ -3919,6 +4002,33 @@ async def fetch_with_playwright(url: str, user_agent: str = None, cookies: Dict 
                             headers_log[key] = response.headers.get(key)
                     asyncio.create_task(
                         writelog(f'[Playwright 429] Response headers: {headers_log}', False))
+
+                # 페이지 로드 후 인간처럼 행동
+                if status_code == 200:
+                    # 네트워크가 완전히 idle 상태가 될 때까지 대기
+                    try:
+                        await page.wait_for_load_state('networkidle', timeout=5000)
+                    except:
+                        pass  # timeout이어도 계속 진행
+
+                    # 초기 대기 (JavaScript 실행 시간 확보)
+                    await page.wait_for_timeout(random.randint(800, 1500))
+
+                    # 랜덤한 마우스 움직임
+                    await page.mouse.move(random.randint(100, 500), random.randint(100, 500))
+                    await page.wait_for_timeout(random.randint(150, 400))
+
+                    # 페이지 스크롤 (자연스러운 동작)
+                    await page.evaluate('window.scrollBy(0, window.innerHeight / 3)')
+                    await page.wait_for_timeout(random.randint(400, 900))
+
+                    # 조금 더 스크롤
+                    await page.evaluate('window.scrollBy(0, window.innerHeight / 4)')
+                    await page.wait_for_timeout(random.randint(300, 700))
+
+                    # 다시 위로 스크롤
+                    await page.evaluate('window.scrollTo(0, 0)')
+                    await page.wait_for_timeout(random.randint(300, 600))
             except Exception as e:
                 # 페이지 로드 실패 (타임아웃, 네트워크 오류 등)
                 asyncio.create_task(writelog(f'fetch_with_playwright: Failed to load {url}: {str(e)}', False))
@@ -3939,14 +4049,8 @@ async def fetch_with_playwright(url: str, user_agent: str = None, cookies: Dict 
             actual_user_agent = ""
 
             try:
-                if status_code == 200:
-                    # 추가 대기 (동적 콘텐츠 로드)
-                    await page.wait_for_timeout(random.randint(1000, 2000))
-
-                    # HTML 콘텐츠 가져오기
-                    html_content = await page.content()
-                else:
-                    html_content = await page.content() if status_code else ""
+                # HTML 콘텐츠 가져오기 (이미 위에서 충분히 대기함)
+                html_content = await page.content() if status_code else ""
 
                 # 브라우저에서 실제 사용된 User-Agent 가져오기 (BrowserLikeClient와 일관성 유지)
                 try:
