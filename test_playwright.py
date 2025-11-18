@@ -4,6 +4,7 @@ Playwright를 사용한 네이버 스마트스토어 봇 감지 우회 테스트
 """
 
 import asyncio
+import os
 import traceback
 from typing import Dict, Tuple
 from playwright.async_api import async_playwright
@@ -23,32 +24,73 @@ async def fetch_with_playwright(url: str, user_agent: str = None) -> Tuple[str, 
     try:
         async with async_playwright() as p:
             print(f"🚀 브라우저 시작 중...")
-            # 실제 Chrome 바이너리 사용 (더 탐지하기 어려움)
+            # 실제 Chrome/Edge 바이너리 사용 (더 탐지하기 어려움)
+            browser = None
+            browser_paths = [
+                r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+                r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+                r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+                r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
+                "/usr/bin/google-chrome",
+                "/usr/bin/chromium-browser",
+                "/usr/bin/chromium",
+                "/usr/bin/microsoft-edge",
+            ]
+
+            launch_args = [
+                '--disable-blink-features=AutomationControlled',
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+            ]
+
+            # 1. Chrome channel 시도
             try:
-                print(f"  → 실제 Chrome 바이너리 사용 시도...")
+                print(f"  → Chrome 사용 시도 (channel='chrome')...")
                 browser = await p.chromium.launch(
-                    channel='chrome',  # 실제 Chrome 사용
+                    channel='chrome',
                     headless=True,
-                    args=[
-                        '--disable-blink-features=AutomationControlled',
-                        '--no-sandbox',
-                        '--disable-setuid-sandbox',
-                        '--disable-dev-shm-usage',
-                    ]
+                    args=launch_args
                 )
-                print(f"  ✅ Chrome 바이너리 사용 성공")
+                print(f"  ✅ Chrome 사용 성공 (channel='chrome')")
             except Exception as chrome_error:
-                # Chrome이 없으면 Chromium 사용
-                print(f"  ⚠️  Chrome 없음, Chromium 사용: {str(chrome_error)[:100]}")
-                browser = await p.chromium.launch(
-                    headless=True,
-                    args=[
-                        '--disable-blink-features=AutomationControlled',
-                        '--no-sandbox',
-                        '--disable-setuid-sandbox',
-                        '--disable-dev-shm-usage',
-                    ]
-                )
+                print(f"  ⚠️  channel='chrome' 실패: {str(chrome_error)[:100]}")
+
+                # 2. Edge channel 시도
+                try:
+                    print(f"  → Edge 사용 시도 (channel='msedge')...")
+                    browser = await p.chromium.launch(
+                        channel='msedge',
+                        headless=True,
+                        args=launch_args
+                    )
+                    print(f"  ✅ Edge 사용 성공 (channel='msedge')")
+                except Exception as edge_error:
+                    print(f"  ⚠️  channel='msedge' 실패: {str(edge_error)[:100]}")
+                    print(f"  → 시스템 브라우저 경로 검색 중...")
+
+                    # 3. 직접 경로로 시도
+                    for browser_path in browser_paths:
+                        if os.path.exists(browser_path):
+                            try:
+                                print(f"  → 브라우저 경로 시도: {browser_path}")
+                                browser = await p.chromium.launch(
+                                    executable_path=browser_path,
+                                    headless=True,
+                                    args=launch_args
+                                )
+                                print(f"  ✅ 브라우저 사용 성공: {browser_path}")
+                                break
+                            except Exception as path_error:
+                                print(f"  ⚠️  경로 실패: {str(path_error)[:100]}")
+                                continue
+
+                    # 모든 시도 실패
+                    if browser is None:
+                        raise Exception(
+                            f"Chrome 또는 Edge 브라우저를 찾을 수 없습니다. "
+                            f"시스템에 Chrome 또는 Edge를 설치하거나 PLAYWRIGHT_BROWSERS_PATH 환경변수를 설정하세요."
+                        )
 
             # 컨텍스트 생성
             context = await browser.new_context(

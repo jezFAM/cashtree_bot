@@ -3864,53 +3864,64 @@ async def fetch_with_playwright(url: str, user_agent: str = None) -> Tuple[str, 
     """
     try:
         async with async_playwright() as p:
-            # 실제 Chrome 바이너리 사용 (더 탐지하기 어려움)
+            # 실제 Chrome/Edge 바이너리 사용 (더 탐지하기 어려움)
             browser = None
 
-            # 시스템 Chrome 경로 찾기
-            chrome_paths = [
+            # 시스템 브라우저 경로 찾기
+            browser_paths = [
                 r"C:\Program Files\Google\Chrome\Application\chrome.exe",
                 r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+                r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
+                r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
             ]
 
-            # 먼저 channel='chrome' 시도
+            launch_args = [
+                '--disable-blink-features=AutomationControlled',
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+            ]
+
+            # 1. channel='chrome' 시도
             try:
                 browser = await p.chromium.launch(
                     channel='chrome',
                     headless=True,
-                    args=[
-                        '--disable-blink-features=AutomationControlled',
-                        '--no-sandbox',
-                        '--disable-setuid-sandbox',
-                        '--disable-dev-shm-usage',
-                    ]
+                    args=launch_args
                 )
-            except Exception as channel_error:
-                # channel='chrome' 실패 시 직접 경로로 시도
-                asyncio.create_task(writelog(f'fetch_with_playwright: channel=chrome failed, trying direct path: {str(channel_error)[:100]}', False))
+                asyncio.create_task(writelog(f'fetch_with_playwright: Using Chrome (channel=chrome)', False))
+            except Exception as chrome_error:
+                asyncio.create_task(writelog(f'fetch_with_playwright: channel=chrome failed: {str(chrome_error)[:100]}', False))
 
-                for chrome_path in chrome_paths:
-                    if os.path.exists(chrome_path):
-                        try:
-                            browser = await p.chromium.launch(
-                                executable_path=chrome_path,
-                                headless=True,
-                                args=[
-                                    '--disable-blink-features=AutomationControlled',
-                                    '--no-sandbox',
-                                    '--disable-setuid-sandbox',
-                                    '--disable-dev-shm-usage',
-                                ]
-                            )
-                            asyncio.create_task(writelog(f'fetch_with_playwright: Using Chrome at {chrome_path}', False))
-                            break
-                        except Exception as path_error:
-                            asyncio.create_task(writelog(f'fetch_with_playwright: Failed to use Chrome at {chrome_path}: {str(path_error)[:100]}', False))
-                            continue
+                # 2. channel='msedge' 시도
+                try:
+                    browser = await p.chromium.launch(
+                        channel='msedge',
+                        headless=True,
+                        args=launch_args
+                    )
+                    asyncio.create_task(writelog(f'fetch_with_playwright: Using Edge (channel=msedge)', False))
+                except Exception as edge_error:
+                    asyncio.create_task(writelog(f'fetch_with_playwright: channel=msedge failed: {str(edge_error)[:100]}', False))
 
-                # 모든 시도가 실패하면 에러
-                if browser is None:
-                    raise Exception("No Chrome browser found. Please install Google Chrome or ensure PLAYWRIGHT_BROWSERS_PATH is set correctly.")
+                    # 3. 직접 경로로 시도
+                    for browser_path in browser_paths:
+                        if os.path.exists(browser_path):
+                            try:
+                                browser = await p.chromium.launch(
+                                    executable_path=browser_path,
+                                    headless=True,
+                                    args=launch_args
+                                )
+                                asyncio.create_task(writelog(f'fetch_with_playwright: Using browser at {browser_path}', False))
+                                break
+                            except Exception as path_error:
+                                asyncio.create_task(writelog(f'fetch_with_playwright: Failed at {browser_path}: {str(path_error)[:100]}', False))
+                                continue
+
+                    # 모든 시도가 실패하면 에러
+                    if browser is None:
+                        raise Exception("No Chrome or Edge browser found. Please install Chrome/Edge or ensure PLAYWRIGHT_BROWSERS_PATH is set correctly.")
 
             # 컨텍스트 생성
             context = await browser.new_context(
