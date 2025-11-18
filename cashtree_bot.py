@@ -2728,60 +2728,18 @@ async def get_place_answer(place_url, cnt, interval, pattern):
         try:
             while True:
                 try:
-                    # BrowserLikeClient의 기존 쿠키를 Playwright 형식으로 가져오기
-                    info_url = place_url.replace("home", "information")
-                    existing_cookies = client.get_playwright_cookies(info_url)
-
-                    # Playwright를 사용하여 페이지 가져오기 (봇 감지 우회, 기존 쿠키 전달)
-                    html, status_code, browser_cookies, actual_user_agent = await fetch_with_playwright(
-                        info_url,
-                        user_agent=None,  # Playwright가 자동으로 생성
-                        cookies=existing_cookies
-                    )
-
-                    # Playwright가 사용한 User-Agent를 BrowserLikeClient에 동기화 (일관성 유지)
-                    if actual_user_agent and actual_user_agent != client.user_agent:
-                        client.update_user_agent(actual_user_agent)
-                        asyncio.create_task(
-                            writelog(f'[User-Agent Sync] Updated BrowserLikeClient User-Agent to match Playwright', False))
-
-                    # Playwright에서 얻은 쿠키를 httpx 클라이언트에 적용 (API 요청 시 사용)
-                    if browser_cookies:
-                        client.cookie_manager.set_cookies_from_playwright(browser_cookies, info_url)
-                        asyncio.create_task(
-                            writelog(f'Applied {len(browser_cookies)} cookies from Playwright to httpx client for {info_url}', False))
-                    else:
-                        # Playwright에서 쿠키를 받지 못한 경우 ini 설정의 쿠키를 fallback으로 사용
-                        asyncio.create_task(
-                            writelog(f'[Fallback] No cookies from Playwright, using ini config cookies for {info_url}', False))
-                        fallback_cookies = []
-                        if dataInfo.store_nnb:
-                            fallback_cookies.append({'name': 'NNB', 'value': dataInfo.store_nnb, 'domain': '.naver.com', 'path': '/'})
-                        if dataInfo.store_fwb:
-                            fallback_cookies.append({'name': '_fwb', 'value': dataInfo.store_fwb, 'domain': '.naver.com', 'path': '/'})
-                        if dataInfo.store_buc:
-                            fallback_cookies.append({'name': 'BUC', 'value': dataInfo.store_buc, 'domain': '.naver.com', 'path': '/'})
-                        if dataInfo.store_token:
-                            fallback_cookies.append({'name': 'X-Wtm-Cpt-Tk', 'value': dataInfo.store_token, 'domain': '.naver.com', 'path': '/'})
-
-                        if fallback_cookies:
-                            client.cookie_manager.set_cookies_from_playwright(fallback_cookies, info_url)
-                            asyncio.create_task(
-                                writelog(f'Applied {len(fallback_cookies)} fallback cookies from ini config', False))
-
-                    if status_code == 429:
+                    response = await client.get(f'{place_url.replace("home", "information")}')
+                    if response.status_code == 429:
                         # 429 Too Many Requests
+                        msg = response.text
                         asyncio.create_task(
-                            writelog(f'get_place_answer : {info_url} - 429 Too Many Requests', False))
+                            writelog(f'get_place_answer : {place_url}\n{msg}', False))
                         break
-                    elif 500 <= status_code < 600:
+                    elif 500 <= response.status_code < 600:
                         asyncio.create_task(
-                            writelog(f'get_place_answer : {status_code} error', False))
+                            writelog(f'get_place_answer : {response.status_code} error', False))
                         break
-                    elif status_code != 200:
-                        asyncio.create_task(
-                            writelog(f'get_place_answer : {status_code} status code (expected 200)', False))
-                        break
+                    html = response.text
                     soup = bs(html, 'html.parser')
                     info_content = soup.find('div', class_='AX_W3 _6sPQ')
                     if info_content:
@@ -3660,44 +3618,6 @@ async def get_kakao_place_answer(place_url, cnt, interval, pattern):
         review_offset = 0
         isSuccess = False
         try:
-            # 먼저 카카오맵 페이지 방문해서 쿠키 가져오기
-            existing_cookies = client.get_playwright_cookies(place_url)
-            _, status_code, browser_cookies, actual_user_agent = await fetch_with_playwright(
-                place_url,
-                user_agent=None,  # Playwright가 자동으로 생성
-                cookies=existing_cookies
-            )
-
-            # Playwright가 사용한 User-Agent를 BrowserLikeClient에 동기화 (일관성 유지)
-            if actual_user_agent and actual_user_agent != client.user_agent:
-                client.update_user_agent(actual_user_agent)
-                asyncio.create_task(
-                    writelog(f'[User-Agent Sync] Updated BrowserLikeClient User-Agent to match Playwright', False))
-
-            # Playwright에서 얻은 쿠키를 httpx 클라이언트에 적용
-            if browser_cookies:
-                client.cookie_manager.set_cookies_from_playwright(browser_cookies, place_url)
-                asyncio.create_task(
-                    writelog(f'Applied {len(browser_cookies)} cookies from Playwright to httpx client for {place_url}', False))
-            else:
-                # Playwright에서 쿠키를 받지 못한 경우 ini 설정의 쿠키를 fallback으로 사용
-                asyncio.create_task(
-                    writelog(f'[Fallback] No cookies from Playwright, using ini config cookies for {place_url}', False))
-                fallback_cookies = []
-                if dataInfo.store_nnb:
-                    fallback_cookies.append({'name': 'NNB', 'value': dataInfo.store_nnb, 'domain': '.kakao.com', 'path': '/'})
-                if dataInfo.store_fwb:
-                    fallback_cookies.append({'name': '_fwb', 'value': dataInfo.store_fwb, 'domain': '.kakao.com', 'path': '/'})
-                if dataInfo.store_buc:
-                    fallback_cookies.append({'name': 'BUC', 'value': dataInfo.store_buc, 'domain': '.kakao.com', 'path': '/'})
-                if dataInfo.store_token:
-                    fallback_cookies.append({'name': 'X-Wtm-Cpt-Tk', 'value': dataInfo.store_token, 'domain': '.kakao.com', 'path': '/'})
-
-                if fallback_cookies:
-                    client.cookie_manager.set_cookies_from_playwright(fallback_cookies, place_url)
-                    asyncio.create_task(
-                        writelog(f'Applied {len(fallback_cookies)} fallback cookies from ini config', False))
-
             while True:
                 try:
                     response = await client.get(f'https://place-api.map.kakao.com/places/panel3/{placeID}')
