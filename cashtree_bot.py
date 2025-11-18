@@ -3858,16 +3858,29 @@ async def fetch_with_playwright(url: str, user_agent: str = None) -> Tuple[str, 
     """
     try:
         async with async_playwright() as p:
-            # Chromium 브라우저 시작 (최소 옵션으로 안정성 확보)
-            browser = await p.chromium.launch(
-                headless=True,
-                args=[
-                    '--disable-blink-features=AutomationControlled',
-                    '--no-sandbox',
-                    '--disable-setuid-sandbox',
-                    '--disable-dev-shm-usage',
-                ]
-            )
+            # 실제 Chrome 바이너리 사용 (더 탐지하기 어려움)
+            try:
+                browser = await p.chromium.launch(
+                    channel='chrome',  # 실제 Chrome 사용
+                    headless=True,
+                    args=[
+                        '--disable-blink-features=AutomationControlled',
+                        '--no-sandbox',
+                        '--disable-setuid-sandbox',
+                        '--disable-dev-shm-usage',
+                    ]
+                )
+            except:
+                # Chrome이 없으면 Chromium 사용
+                browser = await p.chromium.launch(
+                    headless=True,
+                    args=[
+                        '--disable-blink-features=AutomationControlled',
+                        '--no-sandbox',
+                        '--disable-setuid-sandbox',
+                        '--disable-dev-shm-usage',
+                    ]
+                )
 
             # 컨텍스트 생성
             context = await browser.new_context(
@@ -4085,14 +4098,23 @@ async def fetch_with_playwright(url: str, user_agent: str = None) -> Tuple[str, 
             try:
                 if status_code == 200:
                     # 추가 대기 (동적 콘텐츠 및 쿠키 설정 완료 대기)
-                    await page.wait_for_timeout(8000)  # 8초 대기 (쿠키 생성 충분히 대기)
+                    await page.wait_for_timeout(10000)  # 10초 대기 (매우 긴 대기)
 
                     # 현실적인 사용자 행동 시뮬레이션 (타겟 페이지에서도)
                     try:
                         await page.evaluate('window.scrollTo(0, 300)')
-                        await page.wait_for_timeout(1000)
+                        await page.wait_for_timeout(1200)
                         await page.evaluate('window.scrollTo(0, 600)')
-                        await page.wait_for_timeout(1000)
+                        await page.wait_for_timeout(1200)
+                        await page.evaluate('window.scrollTo(0, 900)')
+                        await page.wait_for_timeout(1200)
+
+                        # 상품 이미지 클릭 시도 (실제 상호작용)
+                        try:
+                            await page.click('img', timeout=2000)
+                            await page.wait_for_timeout(500)
+                        except:
+                            pass
                     except:
                         pass
 
@@ -4100,7 +4122,7 @@ async def fetch_with_playwright(url: str, user_agent: str = None) -> Tuple[str, 
                     html_content = await page.content()
                 elif status_code:
                     # 상태 코드가 있지만 200이 아닌 경우 (403, 429 등)
-                    await page.wait_for_timeout(3000)  # 짧게 대기
+                    await page.wait_for_timeout(5000)  # 5초 대기
                     html_content = await page.content()
                 else:
                     html_content = ""

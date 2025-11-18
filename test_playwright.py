@@ -23,16 +23,32 @@ async def fetch_with_playwright(url: str, user_agent: str = None) -> Tuple[str, 
     try:
         async with async_playwright() as p:
             print(f"🚀 브라우저 시작 중...")
-            # Chromium 브라우저 시작 (최소 옵션으로 안정성 확보)
-            browser = await p.chromium.launch(
-                headless=True,
-                args=[
-                    '--disable-blink-features=AutomationControlled',
-                    '--no-sandbox',
-                    '--disable-setuid-sandbox',
-                    '--disable-dev-shm-usage',
-                ]
-            )
+            # 실제 Chrome 바이너리 사용 (더 탐지하기 어려움)
+            try:
+                print(f"  → 실제 Chrome 바이너리 사용 시도...")
+                browser = await p.chromium.launch(
+                    channel='chrome',  # 실제 Chrome 사용
+                    headless=True,
+                    args=[
+                        '--disable-blink-features=AutomationControlled',
+                        '--no-sandbox',
+                        '--disable-setuid-sandbox',
+                        '--disable-dev-shm-usage',
+                    ]
+                )
+                print(f"  ✅ Chrome 바이너리 사용 성공")
+            except Exception as chrome_error:
+                # Chrome이 없으면 Chromium 사용
+                print(f"  ⚠️  Chrome 없음, Chromium 사용: {str(chrome_error)[:100]}")
+                browser = await p.chromium.launch(
+                    headless=True,
+                    args=[
+                        '--disable-blink-features=AutomationControlled',
+                        '--no-sandbox',
+                        '--disable-setuid-sandbox',
+                        '--disable-dev-shm-usage',
+                    ]
+                )
 
             # 컨텍스트 생성
             context = await browser.new_context(
@@ -209,8 +225,30 @@ async def fetch_with_playwright(url: str, user_agent: str = None) -> Tuple[str, 
             print(f"🏠 네이버 메인 페이지 방문 중...")
             try:
                 await page.goto('https://www.naver.com', wait_until='load', timeout=30000)
-                print(f"⏳ 쿠키 설정 대기 중...")
-                await page.wait_for_timeout(4000)  # 4초 대기 (쿠키 설정 완료 대기)
+                print(f"⏳ 쿠키 설정 대기 중 (7초)...")
+                await page.wait_for_timeout(7000)  # 7초 대기
+
+                print(f"🖱️  사용자 행동 시뮬레이션 중...")
+                # 현실적인 사용자 행동 시뮬레이션
+                try:
+                    await page.evaluate('window.scrollTo(0, 500)')
+                    await page.wait_for_timeout(800)
+                    await page.evaluate('window.scrollTo(0, 1000)')
+                    await page.wait_for_timeout(800)
+                    await page.evaluate('window.scrollTo(0, 1500)')
+                    await page.wait_for_timeout(800)
+                    await page.evaluate('window.scrollTo(0, 0)')
+                    await page.wait_for_timeout(1500)
+
+                    # 검색 박스 클릭 시뮬레이션
+                    try:
+                        await page.click('input[type="text"]', timeout=2000)
+                        await page.wait_for_timeout(500)
+                        print(f"  ✅ 검색 박스 클릭 성공")
+                    except:
+                        print(f"  ⚠️  검색 박스 클릭 실패")
+                except Exception as scroll_error:
+                    print(f"  ⚠️  스크롤 시뮬레이션 실패: {str(scroll_error)[:50]}")
 
                 # 네이버 메인 페이지에서 쿠키 확인
                 main_page_cookies = await context.cookies()
@@ -248,9 +286,29 @@ async def fetch_with_playwright(url: str, user_agent: str = None) -> Tuple[str, 
             browser_cookies = []
 
             try:
-                print(f"⏳ 동적 콘텐츠 및 쿠키 설정 대기 중...")
+                print(f"⏳ 동적 콘텐츠 및 쿠키 설정 대기 중 (10초)...")
                 # 추가 대기 (동적 콘텐츠 및 쿠키 설정 완료 대기)
-                await page.wait_for_timeout(6000)  # 6초 대기 (쿠키 생성 충분히 대기)
+                await page.wait_for_timeout(10000)  # 10초 대기 (매우 긴 대기)
+
+                print(f"🖱️  타겟 페이지 사용자 행동 시뮬레이션 중...")
+                # 현실적인 사용자 행동 시뮬레이션 (타겟 페이지에서도)
+                try:
+                    await page.evaluate('window.scrollTo(0, 300)')
+                    await page.wait_for_timeout(1200)
+                    await page.evaluate('window.scrollTo(0, 600)')
+                    await page.wait_for_timeout(1200)
+                    await page.evaluate('window.scrollTo(0, 900)')
+                    await page.wait_for_timeout(1200)
+
+                    # 상품 이미지 클릭 시도
+                    try:
+                        await page.click('img', timeout=2000)
+                        await page.wait_for_timeout(500)
+                        print(f"  ✅ 이미지 클릭 성공")
+                    except:
+                        print(f"  ⚠️  이미지 클릭 실패")
+                except Exception as scroll_error:
+                    print(f"  ⚠️  스크롤 시뮬레이션 실패: {str(scroll_error)[:50]}")
 
                 # HTML 콘텐츠 가져오기 (모든 상태 코드에 대해)
                 html_content = await page.content()
