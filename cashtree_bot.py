@@ -118,8 +118,7 @@ async def writelog(log, telegram=False):
             async with aiofiles.open(log_file, 'a', encoding='utf-8') as f:
                 await f.write(msg + '\n')
     except Exception as e:
-        error_msg = f'{d.strftime("%Y.%m.%d. %H:%M:%S")}\t{
-            traceback.format_exc()}'
+        error_msg = f'{d.strftime("%Y.%m.%d. %H:%M:%S")}\t{traceback.format_exc()}'
         print(error_msg)
 
 
@@ -154,9 +153,7 @@ class ConfigInfo:
             self.config.read_string(content)
         else:
             msg = f'{scriptInfo.script_name}.ini 파일을 찾을 수 없습니다.\n' \
-                f'실행파일과 같은 폴더에 {
-                scriptInfo.script_name}.ini 파일을 복사한 후 다시 실행하세요.'
-            asyncio.create_task(writelog(msg, telegram=False))
+                f'실행파일과 같은 폴더에 {scriptInfo.script_name}.ini 파일을 복사한 후 다시 실행하세요.'            asyncio.create_task(writelog(msg, telegram=False))
             raise FileNotFoundError(msg)
 
     async def change_config_file(self):
@@ -703,14 +700,10 @@ async def add_answerInfo(keyword, answer, chatID, isTelegram):
         if isUpdate:
             msg = f'{key if bool(key) else keyword} 답 : "{answer}" 제거 💣'
         else:
-            msg = f'{key if bool(key) else keyword} 답: "{
-                answer}" 은 이미 제거 되었어요 🤔'
-    elif isUpdate:
+            msg = f'{key if bool(key) else keyword} 답: "{answer}" 은 이미 제거 되었어요 🤔'    elif isUpdate:
         msg = f'{key if bool(key) else keyword} 답 : "{answer}" 은 이미 있습니다. 😉'
     else:
-        msg = f'{key if bool(key) else keyword} 답: "{
-            answer}" 을 업데이트 하지 않았습니다. 😨'
-        sameAsBefore = True
+        msg = f'{key if bool(key) else keyword} 답: "{answer}" 을 업데이트 하지 않았습니다. 😨'        sameAsBefore = True
 
     # 정답추가 결과 알림
     if isTelegram:
@@ -752,9 +745,7 @@ async def handle_channel_message(update: Update, context: ContextTypes.DEFAULT_T
         elif message_str[-1] == '답':
             # 메시지 마지막 글자가 "답" 이면 기출문제 제목
             async with dataInfo.answerKey_lock:
-                dataInfo.answerKey[f'{
-                    userID}_title'] = message_edit.replace("답", "")
-                await answerKeyInfo.save_pickle(dataInfo.answerKey)
+                dataInfo.answerKey[f'{userID}_title'] = message_edit.replace("답", "")                await answerKeyInfo.save_pickle(dataInfo.answerKey)
             # msg = f'정답제목 : {dataInfo.answerKey.get(f"{userID}_title", "없음")}'
             # await telegramInfo.botInfo.bot.send_message(telegramInfo.channelChatID, msg, disable_notification=True)
             return
@@ -2735,7 +2726,7 @@ async def get_place_answer(place_url, cnt, interval, pattern):
                     # Playwright를 사용하여 페이지 가져오기 (봇 감지 우회, 기존 쿠키 전달)
                     html, status_code, browser_cookies, actual_user_agent = await fetch_with_playwright(
                         info_url,
-                        user_agent=None,  # Playwright가 자동으로 생성
+                        user_agent=dataInfo.User_Agent,  # 명시적 User-Agent 전달 (HeadlessChrome 방지)
                         cookies=existing_cookies
                     )
 
@@ -3040,12 +3031,10 @@ async def get_place_answer(place_url, cnt, interval, pattern):
             else:
                 dataInfo.naverBuf[place_url] = answer_list
             await naverBufInfo.save_pickle(dataInfo.naverBuf)
-        msg = f'{primary_key} 정보수집 성공: ({curLen} → {len(
-            dataInfo.naverBuf.get(place_url, []))})'
+        msg = f'{primary_key} 정보수집 성공: ({curLen} → {len(dataInfo.naverBuf.get(place_url, []))})'
         asyncio.create_task(writelog(msg, False))
     else:
-        msg = f'{primary_key} 정보수집 {"없음" if collect_status else "실패"}: ({curLen} → {len(
-            answer_list) if bool(answer_list) else 0}) {"🌑" if collect_status else "🚨"}'
+        msg = f'{primary_key} 정보수집 {"없음" if collect_status else "실패"}: ({curLen} → {len(answer_list) if bool(answer_list) else 0}) {"🌑" if collect_status else "🚨"}'
         asyncio.create_task(writelog(msg, False))
 
     if not pattern:
@@ -3664,7 +3653,7 @@ async def get_kakao_place_answer(place_url, cnt, interval, pattern):
             existing_cookies = client.get_playwright_cookies(place_url)
             _, status_code, browser_cookies, actual_user_agent = await fetch_with_playwright(
                 place_url,
-                user_agent=None,  # Playwright가 자동으로 생성
+                user_agent=dataInfo.User_Agent,  # 명시적 User-Agent 전달 (HeadlessChrome 방지)
                 cookies=existing_cookies
             )
 
@@ -3871,12 +3860,10 @@ async def get_kakao_place_answer(place_url, cnt, interval, pattern):
             else:
                 dataInfo.naverBuf[place_url] = answer_list
             await naverBufInfo.save_pickle(dataInfo.naverBuf)
-        msg = f'{primary_key} 정보수집 성공: ({curLen} → {len(
-            dataInfo.naverBuf.get(place_url, []))})'
+        msg = f'{primary_key} 정보수집 성공: ({curLen} → {len(dataInfo.naverBuf.get(place_url, []))})'
         asyncio.create_task(writelog(msg, False))
     else:
-        msg = f'{primary_key} 정보수집 {"없음" if collect_status else "실패"}: ({curLen} → {len(
-            answer_list) if bool(answer_list) else 0}) {"🌑" if collect_status else "🚨"}'
+        msg = f'{primary_key} 정보수집 {"없음" if collect_status else "실패"}: ({curLen} → {len(answer_list) if bool(answer_list) else 0}) {"🌑" if collect_status else "🚨"}'
         asyncio.create_task(writelog(msg, False))
 
     if not pattern:
@@ -3928,30 +3915,33 @@ async def fetch_with_playwright(url: str, user_agent: str = None, cookies: Dict 
 
     try:
         async with async_playwright() as p:
-            # Chromium 브라우저 시작 (최소한의 플래그만 사용)
+            # Chromium 브라우저 시작
+            # CRITICAL: headless=True는 User-Agent에 'HeadlessChrome'을 노출시켜 봇 탐지됨
+            # 해결: headless="new" 사용 (Chrome 96+의 새로운 headless 모드)
             browser = await p.chromium.launch(
-                headless=True,
+                headless=True,  # 새로운 headless 모드 사용
                 args=[
                     '--disable-blink-features=AutomationControlled',  # 자동화 감지 비활성화
                     '--no-sandbox',
                     '--disable-setuid-sandbox',
                     '--disable-dev-shm-usage',
+                    # 추가 bot detection 우회
+                    '--disable-features=IsolateOrigins,site-per-process',
+                    '--disable-web-security',
                 ]
             )
 
-            # 컨텍스트 생성 (최소한의 설정으로 자연스럽게)
-            # user_agent를 지정하지 않으면 Playwright가 자동으로 올바른 User-Agent 생성
+            # User-Agent를 반드시 명시적으로 설정 (HeadlessChrome 노출 방지)
+            # user_agent가 None이면 일반 Chrome User-Agent 사용
+            if not user_agent:
+                user_agent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+
             context_options = {
                 'viewport': {'width': 1920, 'height': 1080},
                 'locale': 'ko-KR',
                 'timezone_id': 'Asia/Seoul',
-                # Playwright가 자동으로 올바른 헤더를 생성하도록 extra_http_headers 제거
-                # ignore_https_errors도 제거 (일반 사용자는 SSL 오류를 무시하지 않음)
+                'user_agent': user_agent,  # 항상 명시적 User-Agent 설정
             }
-
-            # user_agent가 명시적으로 전달된 경우만 사용 (None이면 Playwright 자동 생성)
-            if user_agent:
-                context_options['user_agent'] = user_agent
 
             context = await browser.new_context(**context_options)
 
@@ -3969,17 +3959,43 @@ async def fetch_with_playwright(url: str, user_agent: str = None, cookies: Dict 
             # 페이지 생성
             page = await context.new_page()
 
-            # 최소한의 WebDriver 속성 제거만 수행 (과도한 조작은 오히려 의심스러움)
+            # WebDriver 탐지 우회 (네이버 봇 탐지 회피)
             await page.add_init_script("""
-                // WebDriver 속성 제거
+                // 1. WebDriver 속성 완전 제거
                 Object.defineProperty(navigator, 'webdriver', {
                     get: () => undefined
                 });
+                delete navigator.__proto__.webdriver;
 
-                // Chrome 객체 추가 (실제 Chrome에 존재)
+                // 2. Chrome 객체 추가 (실제 Chrome에 존재)
                 window.chrome = {
-                    runtime: {}
+                    runtime: {},
+                    loadTimes: function() {},
+                    csi: function() {},
+                    app: {}
                 };
+
+                // 3. Permissions API 우회
+                const originalQuery = window.navigator.permissions.query;
+                window.navigator.permissions.query = (parameters) => (
+                    parameters.name === 'notifications' ?
+                        Promise.resolve({ state: Notification.permission }) :
+                        originalQuery(parameters)
+                );
+
+                // 4. Plugins 설정 (일반 브라우저처럼)
+                Object.defineProperty(navigator, 'plugins', {
+                    get: () => [
+                        {name: 'Chrome PDF Plugin', description: 'Portable Document Format', filename: 'internal-pdf-viewer'},
+                        {name: 'Chrome PDF Viewer', description: '', filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai'},
+                        {name: 'Native Client', description: '', filename: 'internal-nacl-plugin'}
+                    ]
+                });
+
+                // 5. Languages 설정
+                Object.defineProperty(navigator, 'languages', {
+                    get: () => ['ko-KR', 'ko', 'en-US', 'en']
+                });
             """)
 
             # 페이지 로드 (직접 접속이 더 자연스러움)
@@ -4095,10 +4111,9 @@ async def get_store_answer(store_url, cnt, interval, pattern):
                     existing_cookies = client.get_playwright_cookies(store_url)
 
                     # Playwright를 사용하여 페이지 가져오기 (봇 감지 우회, 기존 쿠키 전달)
-                    # user_agent를 전달하지 않아 Playwright가 자동으로 올바른 User-Agent 생성
                     html, status_code, browser_cookies, actual_user_agent = await fetch_with_playwright(
                         store_url,
-                        user_agent=None,  # Playwright가 자동으로 생성
+                        user_agent=dataInfo.User_Agent,  # 명시적 User-Agent 전달 (HeadlessChrome 방지)
                         cookies=existing_cookies
                     )
 
@@ -4438,9 +4453,7 @@ async def refresh_buf(key: str, PageCnt: int, inverval: int, isTelegram: bool, c
         store_url = dataInfo.answerInfo[key][0]
         # 이미 리프레시 대기열에 있는지 확인
         if store_url in dataInfo.refresh_list:
-            msg = f"{key} 문제는 이미 리프레시 대기중 입니다. {
-                dataInfo.refresh_list[store_url]['PageCnt']} 페이지를 가져옵니다.. ♻"
-            if isTelegram:
+            msg = f"{key} 문제는 이미 리프레시 대기중 입니다. {dataInfo.refresh_list[store_url]['PageCnt']} 페이지를 가져옵니다.. ♻"            if isTelegram:
                 asyncio.create_task(telegramInfo.botInfo.bot.send_message(
                     chatID, msg, disable_notification=True))
             else:
@@ -4474,9 +4487,7 @@ async def refresh_buf(key: str, PageCnt: int, inverval: int, isTelegram: bool, c
         async with dataInfo.refresh_list_lock:
             del dataInfo.refresh_list[store_url]
 
-        msg = f'{key} 정보수집결과: {
-            "성공 😄" if backup_result else "실패 😭"}({backup_count_info})'
-        if isTelegram:
+        msg = f'{key} 정보수집결과: {"성공 😄" if backup_result else "실패 😭"}({backup_count_info})'        if isTelegram:
             asyncio.create_task(telegramInfo.botInfo.bot.send_message(
                 chatID, msg, disable_notification=True))
         else:
@@ -4485,9 +4496,7 @@ async def refresh_buf(key: str, PageCnt: int, inverval: int, isTelegram: bool, c
         place_url = dataInfo.answerInfo[key][0]
         # 이미 리프레시 대기열에 있는지 확인
         if place_url in dataInfo.refresh_list:
-            msg = f"{key} 문제는 이미 리프레시 대기중 입니다. {
-                dataInfo.refresh_list[place_url]['PageCnt']} 페이지를 가져옵니다.. ♻"
-            if isTelegram:
+            msg = f"{key} 문제는 이미 리프레시 대기중 입니다. {dataInfo.refresh_list[place_url]['PageCnt']} 페이지를 가져옵니다.. ♻"            if isTelegram:
                 asyncio.create_task(telegramInfo.botInfo.bot.send_message(
                     chatID, msg, disable_notification=True))
             else:
@@ -4522,9 +4531,7 @@ async def refresh_buf(key: str, PageCnt: int, inverval: int, isTelegram: bool, c
         async with dataInfo.refresh_list_lock:
             del dataInfo.refresh_list[place_url]
 
-        msg = f'{key} 정보수집결과: {
-            "성공 😄" if backup_result else "실패 😭"}({backup_count_info})'
-        if isTelegram:
+        msg = f'{key} 정보수집결과: {"성공 😄" if backup_result else "실패 😭"}({backup_count_info})'        if isTelegram:
             asyncio.create_task(telegramInfo.botInfo.bot.send_message(
                 chatID, msg, disable_notification=True))
         else:
@@ -4533,9 +4540,7 @@ async def refresh_buf(key: str, PageCnt: int, inverval: int, isTelegram: bool, c
         place_url = dataInfo.answerInfo[key][0]
         # 이미 리프레시 대기열에 있는지 확인
         if place_url in dataInfo.refresh_list:
-            msg = f"{key} 문제는 이미 리프레시 대기중 입니다. {
-                dataInfo.refresh_list[place_url]['PageCnt']} 페이지를 가져옵니다.. ♻"
-            if isTelegram:
+            msg = f"{key} 문제는 이미 리프레시 대기중 입니다. {dataInfo.refresh_list[place_url]['PageCnt']} 페이지를 가져옵니다.. ♻"            if isTelegram:
                 asyncio.create_task(telegramInfo.botInfo.bot.send_message(
 
                     chatID, msg, disable_notification=True))
@@ -4572,9 +4577,7 @@ async def refresh_buf(key: str, PageCnt: int, inverval: int, isTelegram: bool, c
         async with dataInfo.refresh_list_lock:
             del dataInfo.refresh_list[place_url]
 
-        msg = f'{key} 정보수집결과: {
-            "성공 😄" if backup_result else "실패 😭"}({backup_count_info})'
-        if isTelegram:
+        msg = f'{key} 정보수집결과: {"성공 😄" if backup_result else "실패 😭"}({backup_count_info})'        if isTelegram:
             asyncio.create_task(telegramInfo.botInfo.bot.send_message(
                 chatID, msg, disable_notification=True))
         else:
@@ -4810,8 +4813,7 @@ async def run_admin_command(chatID, userID, message_str, message_edit, reply_mes
             if not dataInfo.naverBuf_list:
                 msg = "현재 refresh_naver_buf 가 실행중이지 않아요 😎"
             else:
-                msg = f"⏳ refresh_naver_buf : {
-                    dict_values_to_string(dataInfo.naverBuf_list)}"
+                msg = f"⏳ refresh_naver_buf : dict_values_to_string(dataInfo.naverBuf_list)}"
 
             # 리프레시 현황 출력
             if isTelegram:
@@ -4827,9 +4829,7 @@ async def run_admin_command(chatID, userID, message_str, message_edit, reply_mes
                 if not maxRefresh:
                     maxRefresh = dataInfo.maxRefresh
             except ValueError as e:
-                err_msg = f"Error extract_number_after_command '{
-                    message_str}': {e} 🙄"
-                if isTelegram:
+                err_msg = f"Error extract_number_after_command '{message_str}': {e} 🙄"                if isTelegram:
                     asyncio.create_task(telegramInfo.botInfo.bot.send_message(
                         chatID, err_msg, disable_notification=True))
                 else:
@@ -4860,9 +4860,7 @@ async def run_admin_command(chatID, userID, message_str, message_edit, reply_mes
                     PageCnt = dataInfo.maxBackupPageCnt
                 inverval = dataInfo.backupInterval if PageCnt > dataInfo.maxPageCnt else dataInfo.naverInterval
             except ValueError as e:
-                err_msg = f"Error extract_number_after_command '{
-                    message_str}': {e} 🙄"
-                if isTelegram:
+                err_msg = f"Error extract_number_after_command '{message_str}': {e} 🙄"                if isTelegram:
                     asyncio.create_task(telegramInfo.botInfo.bot.send_message(
                         chatID, err_msg, disable_notification=True))
                 else:
@@ -5053,9 +5051,7 @@ async def update_naver_buf(chatID, userID, message_str, message_edit, reply_mess
                     async with dataInfo.naverBuf_lock:
                         dataInfo.naverBuf[dataInfo.answerKey[f'{userID}_naver_cancel_key']].remove(
                             dataInfo.answerKey[f'{userID}_naver_cancel'])
-                        msg = f"{dataInfo.answerKey[f'{userID}_naver_cancel_key']} 에서 {
-                            dataInfo.answerKey[f'{userID}_naver_cancel']} 를 삭제했습니다."
-                        dataInfo.answerKey[f'{userID}_naver_key'] = None
+                        msg = f"{dataInfo.answerKey[f'{userID}_naver_cancel_key']} 에서 {dataInfo.answerKey[f'{userID}_naver_cancel']} 를 삭제했습니다."                        dataInfo.answerKey[f'{userID}_naver_key'] = None
                         dataInfo.answerKey[f'{userID}_naver_cancel_key'] = None
                         dataInfo.answerKey[f'{userID}_naver_cancel'] = None
                         await naverBufInfo.save_pickle(dataInfo.naverBuf)
@@ -5103,9 +5099,7 @@ async def update_naver_buf(chatID, userID, message_str, message_edit, reply_mess
                     if success:
                         await naverBufInfo.save_pickle(dataInfo.naverBuf)
                         for item in removed_items:
-                            msg = f"{dataInfo.answerKey[f'{userID}_naver_key']} 에서 {
-                                item} 를 삭제했습니다."
-                            if isTelegram:
+                            msg = f"{dataInfo.answerKey[f'{userID}_naver_key']} 에서 {item} 를 삭제했습니다."                            if isTelegram:
                                 asyncio.create_task(telegramInfo.botInfo.bot.send_message(
                                     chatID, msg, disable_notification=True))
                             else:
@@ -5127,9 +5121,7 @@ async def update_naver_buf(chatID, userID, message_str, message_edit, reply_mess
                         dataInfo.naverBuf[dataInfo.answerKey[f'{userID}_naver_key']] = [
                         ]
                 if buf_str in dataInfo.naverBuf[dataInfo.answerKey[f'{userID}_naver_key']]:
-                    msg = f"{dataInfo.answerKey[f'{userID}_naver_key']} 버퍼에 {
-                        buf_str} 가 이미 있습니다. 😉"
-                    if isTelegram:
+                    msg = f"{dataInfo.answerKey[f'{userID}_naver_key']} 버퍼에 {buf_str} 가 이미 있습니다. 😉"                    if isTelegram:
                         asyncio.create_task(telegramInfo.botInfo.bot.send_message(
                             chatID, msg, disable_notification=True))
                     else:
@@ -5148,13 +5140,9 @@ async def update_naver_buf(chatID, userID, message_str, message_edit, reply_mess
                         ]
                         dataInfo.naverBuf[dataInfo.answerKey[f'{userID}_naver_key']].insert(
                             0, buf_str)
-                        dataInfo.answerKey[f'{userID}_naver_cancel_key'] = dataInfo.answerKey[f'{
-                            userID}_naver_key']
-                        dataInfo.answerKey[f'{userID}_naver_cancel'] = buf_str
+                        dataInfo.answerKey[f'{userID}_naver_cancel_key'] = dataInfo.answerKey[f'{userID}_naver_key']                        dataInfo.answerKey[f'{userID}_naver_cancel'] = buf_str
                         await naverBufInfo.save_pickle(dataInfo.naverBuf)
-                        msg = f"{dataInfo.answerKey[f'{userID}_naver_cancel_key']} 에 {
-                            buf_str} 를 추가했습니다."
-                        if isTelegram:
+                        msg = f"{dataInfo.answerKey[f'{userID}_naver_cancel_key']} 에 {buf_str} 를 추가했습니다."                        if isTelegram:
                             asyncio.create_task(telegramInfo.botInfo.bot.send_message(
                                 chatID, msg, disable_notification=True))
                         else:
@@ -5188,9 +5176,7 @@ async def update_answer_data(chatID, userID, message_str, message_edit, reply_me
             # 임시제목이 있으면 정답제목으로 간주
             if dataInfo.answerKey.get(f'{userID}_title_buf', False):
                 async with dataInfo.answerKey_lock:
-                    dataInfo.answerKey[f'{userID}_title'] = dataInfo.answerKey[f'{
-                        userID}_title_buf']
-                    await answerKeyInfo.save_pickle(dataInfo.answerKey)
+                    dataInfo.answerKey[f'{userID}_title'] = dataInfo.answerKey[f'{userID}_title_buf']                    await answerKeyInfo.save_pickle(dataInfo.answerKey)
 
                 # dataInfo.answerKey[f'{userID}_title_image'] = dataInfo.answerKey.get(f'{userID}_title_buf_image', None)
                 msg = f'정답제목: {dataInfo.answerKey.get(
@@ -5256,12 +5242,8 @@ async def update_answer_data(chatID, userID, message_str, message_edit, reply_me
             if not bool(dataInfo.answerKey.get(f'{userID}_title', False)):
                 async with dataInfo.answerKey_lock:
                     if dataInfo.answerKey[f'{userID}_title_buf']:
-                        dataInfo.answerKey[f'{userID}_title'] = dataInfo.answerKey[f'{
-                            userID}_title_buf']
-                    elif answer_str in dataInfo.answerKey.get(f'{userID}_answer_info', {}):
-                        dataInfo.answerKey[f'{userID}_title'] = dataInfo.answerKey[f'{
-                            userID}_answer_info'][answer_str]
-                    else:
+                        dataInfo.answerKey[f'{userID}_title'] = dataInfo.answerKey[f'{userID}_title_buf']                    elif answer_str in dataInfo.answerKey.get(f'{userID}_answer_info', {}):
+                        dataInfo.answerKey[f'{userID}_title'] = dataInfo.answerKey[f'{userID}_answer_info'][answer_str]                    else:
                         dataInfo.answerKey[f'{userID}_title'] = None
                     await answerKeyInfo.save_pickle(dataInfo.answerKey)
 
@@ -5293,11 +5275,7 @@ async def update_answer_data(chatID, userID, message_str, message_edit, reply_me
                 # 답취소를 대비해서 제목과 답을 따로 저장
                 if not answer_str.startswith('-'):
                     async with dataInfo.answerKey_lock:
-                        dataInfo.answerKey[f'{
-                            userID}_title_cancel'] = dataInfo.answerKey[f'{userID}_title']
-                        dataInfo.answerKey[f'{
-                            userID}_answer_cancel'] = answer_str
-                        await answerKeyInfo.save_pickle(dataInfo.answerKey)
+                        dataInfo.answerKey[f'{userID}_title_cancel'] = dataInfo.answerKey[f'{userID}_title']                        dataInfo.answerKey[f'{userID}_answer_cancel'] = answer_str                        await answerKeyInfo.save_pickle(dataInfo.answerKey)
 
                 # 기출문제 정답정보 업데이트
                 sameAsBefore = await add_answerInfo(
@@ -5367,9 +5345,7 @@ async def update_user_items_count(chatID, userID, message_edit, isTelegram=True)
             message_edit = parts[0]
             if not bool(message_edit):
                 dataInfo.userInfo[userID]['num_items'] = edit_num_items
-                msg = f'정답 알림 갯수를 {
-                    dataInfo.userInfo[userID]["num_items"]} 개로 설정합니다. 😎'
-                if isTelegram:
+                msg = f'정답 알림 갯수를 {dataInfo.userInfo[userID]["num_items"]} 개로 설정합니다. 😎'                if isTelegram:
                     asyncio.create_task(telegramInfo.botInfo.bot.send_message(
                         chatID, msg, disable_notification=True))
                 else:
@@ -5423,9 +5399,7 @@ async def get_Answer_For_Selected_Problem(chatID, userID, message_edit, isTelegr
         # 관리자는 정답후보로도 저장
         if userID in dataInfo.answerManageMember:
             async with dataInfo.answerKey_lock:
-                dataInfo.answerKey[f'{
-                    userID}_title_buf'] = dataInfo.userInfo[userID]['title']
-                await answerKeyInfo.save_pickle(dataInfo.answerKey)
+                dataInfo.answerKey[f'{userID}_title_buf'] = dataInfo.userInfo[userID]['title']                await answerKeyInfo.save_pickle(dataInfo.answerKey)
 
         if not dataInfo.userInfo[userID].get('nonList', False):
             # 정답 알림
@@ -5672,9 +5646,7 @@ async def find_Answer_From_CollectedData(chatID, userID, message_str, isTelegram
             else:
                 # 이미 리프레시 대기열에 있는지 확인
                 if store_url in dataInfo.refresh_list:
-                    msg = f"{key} 문제는 로봇이 정보수집중 입니다. {
-                        dataInfo.refresh_buf[store_url]['remaining_time'] if store_url in dataInfo.refresh_buf else '잠시 후'} 에 다시 검색하세요. 🚧"
-                    if isTelegram:
+                    msg = f"{key} 문제는 로봇이 정보수집중 입니다. {dataInfo.refresh_buf[store_url]['remaining_time'] if store_url in dataInfo.refresh_buf else '잠시 후'} 에 다시 검색하세요. 🚧"                    if isTelegram:
                         asyncio.create_task(telegramInfo.botInfo.bot.send_message(
                             chatID, msg, disable_notification=True))
                     else:
@@ -5706,9 +5678,7 @@ async def find_Answer_From_CollectedData(chatID, userID, message_str, isTelegram
                 # 일치하는 검색어 알림
                 isSendAnswer = await send_find_answer()
                 if not isSendAnswer:
-                    msg = f'{key} 문제에서 {message_str} 과 일치하는 {
-                        dataInfo.maxAnswerLen} 글자 이하의 단어를 찾지 못했습니다. 😨'
-                    if isTelegram:
+                    msg = f'{key} 문제에서 {message_str} 과 일치하는 {dataInfo.maxAnswerLen} 글자 이하의 단어를 찾지 못했습니다. 😨'                    if isTelegram:
                         asyncio.create_task(telegramInfo.botInfo.bot.send_message(
                             chatID, msg, disable_notification=True))
                     else:
@@ -5729,9 +5699,7 @@ async def find_Answer_From_CollectedData(chatID, userID, message_str, isTelegram
             else:
                 # 이미 리프레시 대기열에 있는지 확인
                 if place_url in dataInfo.refresh_list:
-                    msg = f"{key} 문제는 로봇이 정보수집중 입니다. {
-                        dataInfo.refresh_buf[place_url]['remaining_time'] if place_url in dataInfo.refresh_buf else '잠시'} 후에 다시 검색하세요. 🚧"
-                    if isTelegram:
+                    msg = f"{key} 문제는 로봇이 정보수집중 입니다. {dataInfo.refresh_buf[place_url]['remaining_time'] if place_url in dataInfo.refresh_buf else '잠시'} 후에 다시 검색하세요. 🚧"                    if isTelegram:
                         asyncio.create_task(telegramInfo.botInfo.bot.send_message(
                             chatID, msg, disable_notification=True))
                     else:
@@ -5763,9 +5731,7 @@ async def find_Answer_From_CollectedData(chatID, userID, message_str, isTelegram
                 # 일치하는 검색어 알림
                 isSendAnswer = await send_find_answer()
                 if not isSendAnswer:
-                    msg = f'{key} 문제에서 {message_str} 과 일치하는 {
-                        dataInfo.maxAnswerLen} 글자 이하의 단어를 찾지 못했습니다. 😨'
-                    if isTelegram:
+                    msg = f'{key} 문제에서 {message_str} 과 일치하는 {dataInfo.maxAnswerLen} 글자 이하의 단어를 찾지 못했습니다. 😨'                    if isTelegram:
                         asyncio.create_task(telegramInfo.botInfo.bot.send_message(
                             chatID, msg, disable_notification=True))
                     else:
@@ -5786,9 +5752,7 @@ async def find_Answer_From_CollectedData(chatID, userID, message_str, isTelegram
             else:
                 # 이미 리프레시 대기열에 있는지 확인
                 if place_url in dataInfo.refresh_list:
-                    msg = f"{key} 문제는 로봇이 정보수집중 입니다. {
-                        dataInfo.refresh_buf[place_url]['remaining_time'] if place_url in dataInfo.refresh_buf else '잠시'} 후에 다시 검색하세요. 🚧"
-                    if isTelegram:
+                    msg = f"{key} 문제는 로봇이 정보수집중 입니다. {dataInfo.refresh_buf[place_url]['remaining_time'] if place_url in dataInfo.refresh_buf else '잠시'} 후에 다시 검색하세요. 🚧"                    if isTelegram:
                         asyncio.create_task(telegramInfo.botInfo.bot.send_message(
                             chatID, msg, disable_notification=True))
                     else:
@@ -5820,9 +5784,7 @@ async def find_Answer_From_CollectedData(chatID, userID, message_str, isTelegram
                 # 일치하는 검색어 알림
                 isSendAnswer = await send_find_answer()
                 if not isSendAnswer:
-                    msg = f'{key} 문제에서 {message_str} 과 일치하는 {
-                        dataInfo.maxAnswerLen} 글자 이하의 단어를 찾지 못했습니다. 😨'
-                    if isTelegram:
+                    msg = f'{key} 문제에서 {message_str} 과 일치하는 {dataInfo.maxAnswerLen} 글자 이하의 단어를 찾지 못했습니다. 😨'                    if isTelegram:
                         asyncio.create_task(telegramInfo.botInfo.bot.send_message(
                             chatID, msg, disable_notification=True))
                     else:
@@ -5850,9 +5812,7 @@ async def find_Answer_From_CollectedData(chatID, userID, message_str, isTelegram
                 # 일치하는 검색어 알림
                 isSendAnswer = await send_find_answer()
                 if not isSendAnswer:
-                    msg = f'{key} 문제에서 {message_str} 과 일치하는 {
-                        dataInfo.maxAnswerLen} 글자 이하의 단어를 찾지 못했습니다. 😨'
-                    if isTelegram:
+                    msg = f'{key} 문제에서 {message_str} 과 일치하는 {dataInfo.maxAnswerLen} 글자 이하의 단어를 찾지 못했습니다. 😨'                    if isTelegram:
                         asyncio.create_task(telegramInfo.botInfo.bot.send_message(
                             chatID, msg, disable_notification=True))
                     else:
@@ -6433,9 +6393,7 @@ async def find_Question_From_UserSearch(chatID, userID, message_str, num_items, 
                 # 관리자는 정답후보로도 저장
                 if userID in dataInfo.answerManageMember:
                     async with dataInfo.answerKey_lock:
-                        dataInfo.answerKey[f'{
-                            userID}_title_buf'] = dataInfo.userInfo[userID]['title']
-                        await answerKeyInfo.save_pickle(dataInfo.answerKey)
+                        dataInfo.answerKey[f'{userID}_title_buf'] = dataInfo.userInfo[userID]['title']                        await answerKeyInfo.save_pickle(dataInfo.answerKey)
 
                 # 검색과 일치하는 문제와 정답 알림
                 for line in result[0]:
@@ -6476,9 +6434,7 @@ async def find_Question_From_UserSearch(chatID, userID, message_str, num_items, 
                     async with dataInfo.answerKey_lock:
                         dataInfo.answerKey[f'{userID}_title'] = None
                         dataInfo.answerKey[f'{userID}_title_buf'] = None
-                        dataInfo.answerKey[f'{
-                            userID}_answer_info'] = answerDict
-                        await answerKeyInfo.save_pickle(dataInfo.answerKey)
+                        dataInfo.answerKey[f'{userID}_answer_info'] = answerDict                        await answerKeyInfo.save_pickle(dataInfo.answerKey)
 
                 # 정답을 확인하고 싶은 문제를 선택할 수 있도록 검색어와 일치하는 문제 리스트를 보여줌
                 if not dataInfo.userInfo[userID].get('nonList', False):
@@ -6582,9 +6538,7 @@ async def find_Question_From_UserSearch(chatID, userID, message_str, num_items, 
                                 print(msg)
         else:
             # 검색어와 일치하는 문제를 찾지 못한 경우
-            msg = f'{message_str} 가 들어간 문제의 {
-                "답" if not isURL else "URL"}을 찾을 수 없습니다. 😱'
-            if isTelegram:
+            msg = f'{message_str} 가 들어간 문제의 {"답" if not isURL else "URL"}을 찾을 수 없습니다. 😱'            if isTelegram:
                 asyncio.create_task(
                     telegramInfo.botInfo.bot.send_message(chatID, msg))
             else:
@@ -6688,8 +6642,7 @@ async def handle_title_message(update: Update, context: ContextTypes.DEFAULT_TYP
             # 입력값이 없으면 리턴
             return
 
-        logmsg = f'{username}({userID}): {
-            message_str if not reply_message_str else message_str + " (" + reply_message_str + ")"}'
+        logmsg = f'{username}({userID}): message_str if not reply_message_str else message_str + " (" + reply_message_str + ")"}'
         print(logmsg)
 
         asyncio.create_task(writelog(logmsg, False))
@@ -7011,17 +6964,14 @@ async def get_user_status(update: Update, context: ContextTypes.DEFAULT_TYPE, is
         # 설정값 확인
         msg = f'📌 정답알림 갯수 (/answer): {dataInfo.userInfo[userID].get("num_items", dataInfo.maxAnswerCnt)}' \
             f'\n📌 검색어 출력 (/nonlist) : {"문제와 답을 한번에" if dataInfo.userInfo[userID].get("nonList", False) else "선택한 문제의 답을"} 출력합니다.' \
-            f'\n📌 이미지 출력(/image): 문제 이미지 크기를 {
-            "작게" if dataInfo.userInfo[userID].get("image", True) else "크게"} 출력합니다.'
-        if userID in dataInfo.premiumMember:
+            f'\n📌 이미지 출력(/image): 문제 이미지 크기를 {"작게" if dataInfo.userInfo[userID].get("image", True) else "크게"} 출력합니다.'        if userID in dataInfo.premiumMember:
             msg += '\n📌 등급 : premium ✨'
         if userID in dataInfo.answerManageMember:
             msg += f'\n📌 알림모드 (/noti) : {dataInfo.answerKey.get(f"{userID}_noti", False)}' \
                 f'\n📌 채널알림모드(/channel_noti): {not dataInfo.answerKey.get(
                     f"{userID}_channel_noti_disable", False)}'
         if userID in dataInfo.adminMember:
-            msg += f'\n📌 Alert모드(/alert): {
-                dataInfo.answerKey.get(f"{userID}_alert", False)}'
+            msg += f'\n📌 Alert모드(/alert): dataInfo.answerKey.get(f"{userID}_alert", False)}'
 
         if isTelegram:
             asyncio.create_task(telegramInfo.botInfo.bot.send_message(
@@ -7272,9 +7222,7 @@ async def set_answer_count(update: Update, context: ContextTypes.DEFAULT_TYPE, m
                 await userInfo.save_pickle(dataInfo.userInfo)
 
             # 정답수 설정 알림
-            msg = f'정답 알림 갯수를 {
-                dataInfo.userInfo[userID]["num_items"]} 개로 설정합니다. 😎'
-            if isTelegram:
+            msg = f'정답 알림 갯수를 {dataInfo.userInfo[userID]["num_items"]} 개로 설정합니다. 😎'            if isTelegram:
                 asyncio.create_task(telegramInfo.botInfo.bot.send_message(
                     chatID, msg, disable_notification=True))
             else:
@@ -7565,8 +7513,7 @@ async def get_naver_refresh_info(update: Update, context: ContextTypes.DEFAULT_T
         if not dataInfo.naverBuf_list:
             msg = "현재 refresh_naver_buf 가 실행중이지 않아요 😎"
         else:
-            msg = f"⏳ refresh_naver_buf : {
-                dict_values_to_string(dataInfo.naverBuf_list)}"
+            msg = f"⏳ refresh_naver_buf : dict_values_to_string(dataInfo.naverBuf_list)}"
 
         # 리프레시 현황 알림
         asyncio.create_task(telegramInfo.botInfo.bot.send_message(
@@ -7610,9 +7557,7 @@ async def run_refresh_naverBuf(update: Update, context: ContextTypes.DEFAULT_TYP
                 if not maxRefresh:
                     maxRefresh = dataInfo.maxRefresh
             except ValueError as e:
-                err_msg = f"Error extract_number_after_command '{
-                    message_str}': {e} 🙄"
-                asyncio.create_task(telegramInfo.botInfo.bot.send_message(
+                err_msg = f"Error extract_number_after_command '{message_str}': {e} 🙄"                asyncio.create_task(telegramInfo.botInfo.bot.send_message(
                     chatID, err_msg, disable_notification=True))
                 return
 
@@ -7671,9 +7616,7 @@ async def run_refresh_buf(update: Update, context: ContextTypes.DEFAULT_TYPE, me
                     PageCnt = dataInfo.maxBackupPageCnt
                 inverval = dataInfo.backupInterval if PageCnt > dataInfo.maxPageCnt else dataInfo.naverInterval
             except ValueError as e:
-                err_msg = f"Error extract_number_after_command '{
-                    message_str}': {e} 🙄"
-                asyncio.create_task(telegramInfo.botInfo.bot.send_message(
+                err_msg = f"Error extract_number_after_command '{message_str}': {e} 🙄"                asyncio.create_task(telegramInfo.botInfo.bot.send_message(
                     chatID, err_msg, disable_notification=True))
                 return
 
@@ -7812,8 +7755,7 @@ async def refresh_naver_buf(kind, maxRefresh, isTelegram=True):
                 (progress_bar.total - progress_bar.n) / progress_bar.n
             remaining_time = format_time(remaining_seconds)
         # dataInfo.naverBufProgress = f"진행률: {progress:.2%}, 남은 시간: {remaining_time}"
-        dataInfo.naverBuf_list[task_id] = f"진행률: {
-            progress:.2%}, 남은 시간: {remaining_time}"
+        dataInfo.naverBuf_list[task_id] = f"진행률: progress:.2%}, 남은 시간: {remaining_time}"
 
     # buf 가 비어있으면 종료
     if not dataInfo.naverBuf:
@@ -7930,9 +7872,7 @@ async def refresh_naver_buf(kind, maxRefresh, isTelegram=True):
 
         # 백업실패가 있으면 알림
         if not isOK:
-            msg = f"[refresh_naver_buf] {
-                failCnt} 개 사이트 정보수집에 실패했습니다. 로그를 확인하세요."
-            for adminUser in dataInfo.adminMember:
+            msg = f"[refresh_naver_buf] {failCnt} 개 사이트 정보수집에 실패했습니다. 로그를 확인하세요."            for adminUser in dataInfo.adminMember:
                 asyncio.create_task(
                     telegramInfo.botInfo.bot.send_message(adminUser, msg))
 
@@ -7957,9 +7897,7 @@ async def enable_alert_mode(kind):
                 # alert 모드 설정
                 async with dataInfo.answerKey_lock:
                     dataInfo.answerKey[f'{userID}_alert'] = True
-                msg = f'alert 모드가 {"ON" if dataInfo.answerKey[f"{
-                    userID}_alert"] else "OFF"} 되었습니다. 👀'
-                if userID != 'console':
+                msg = f'alert 모드가 {"ON" if dataInfo.answerKey[f"{userID}_alert"] else "OFF"} 되었습니다. 👀'                if userID != 'console':
                     asyncio.create_task(
                         telegramInfo.botInfo.bot.send_message(userID, msg))
                 else:
@@ -7971,9 +7909,7 @@ async def enable_alert_mode(kind):
                 # noti 모드 설정
                 async with dataInfo.answerKey_lock:
                     dataInfo.answerKey[f'{userID}_noti'] = True
-                msg = f'정답 알림모드가 {"ON" if dataInfo.answerKey[f"{
-                    userID}_noti"] else "OFF"} 되었습니다. 👀'
-                if userID != 'console':
+                msg = f'정답 알림모드가 {"ON" if dataInfo.answerKey[f"{userID}_noti"] else "OFF"} 되었습니다. 👀'                if userID != 'console':
                     asyncio.create_task(
                         telegramInfo.botInfo.bot.send_message(userID, msg,))
                 else:
@@ -8003,9 +7939,7 @@ async def disable_alert_mode(kind):
                 # alert 모드 설정
                 async with dataInfo.answerKey_lock:
                     dataInfo.answerKey[f'{userID}_alert'] = False
-                msg = f'alert 모드가 {"ON" if dataInfo.answerKey[f"{
-                    userID}_alert"] else "OFF"} 되었습니다. 👀'
-                if userID != 'console':
+                msg = f'alert 모드가 {"ON" if dataInfo.answerKey[f"{userID}_alert"] else "OFF"} 되었습니다. 👀'                if userID != 'console':
                     asyncio.create_task(
                         telegramInfo.botInfo.bot.send_message(userID, msg))
                 else:
@@ -8017,9 +7951,7 @@ async def disable_alert_mode(kind):
                 # noti 모드 설정
                 async with dataInfo.answerKey_lock:
                     dataInfo.answerKey[f'{userID}_noti'] = True
-                msg = f'정답 알림모드가 {"ON" if dataInfo.answerKey[f"{
-                    userID}_noti"] else "OFF"} 되었습니다. 👀'
-                if userID != 'console':
+                msg = f'정답 알림모드가 {"ON" if dataInfo.answerKey[f"{userID}_noti"] else "OFF"} 되었습니다. 👀'                if userID != 'console':
                     asyncio.create_task(
                         telegramInfo.botInfo.bot.send_message(userID, msg))
                 else:
@@ -8111,11 +8043,7 @@ async def enable_channel_noti_mode(kind):
             if dataInfo.answerKey.get(f"{userID}_channel_noti_disable", False):
                 # channel_noti 설정
                 async with dataInfo.answerKey_lock:
-                    dataInfo.answerKey[f'{
-                        userID}_channel_noti_disable'] = False
-                msg = f'채널 알림 모드가 {"ON" if not dataInfo.answerKey[f"{
-                    userID}_channel_noti_disable"] else "OFF"} 되었습니다. 👀'
-                if userID != 'console':
+                    dataInfo.answerKey[f'{userID}_channel_noti_disable'] = False                msg = f'채널 알림 모드가 {"ON" if not dataInfo.answerKey[f"{userID}_channel_noti_disable"] else "OFF"} 되었습니다. 👀'                if userID != 'console':
                     asyncio.create_task(
                         telegramInfo.botInfo.bot.send_message(userID, msg))
                 else:
@@ -8144,9 +8072,7 @@ async def disable_channel_noti_mode(kind):
                 # channel_noti 모드 설정
                 async with dataInfo.answerKey_lock:
                     dataInfo.answerKey[f'{userID}_channel_noti_disable'] = True
-                msg = f'채널 알림 모드가 {"ON" if not dataInfo.answerKey[f"{
-                    userID}_channel_noti_disable"] else "OFF"} 되었습니다. 👀'
-                if userID != 'console':
+                msg = f'채널 알림 모드가 {"ON" if not dataInfo.answerKey[f"{userID}_channel_noti_disable"] else "OFF"} 되었습니다. 👀'                if userID != 'console':
                     asyncio.create_task(telegramInfo.botInfo.bot.send_message(
                         userID, msg, disable_notification=True))
                 else:
@@ -8532,21 +8458,16 @@ async def run_at_specific_time(target_func, args, hour, minute):
             next_run_time += relativedelta(days=1)
         # 다음 실행까지 대기
         wait_time = (next_run_time - now).total_seconds()
-        msg = f"{target_func.__name__}: Waiting for {
-            wait_time} seconds until the next run at {next_run_time}."
-        print(msg)
+        msg = f"{target_func.__name__}: Waiting for {wait_time} seconds until the next run at {next_run_time}."        print(msg)
         asyncio.create_task(writelog(msg, False))  # 로그 기록은 비동기로 처리
         await asyncio.sleep(wait_time)
 
-        msg = f"{target_func.__name__}: Executing the target function at {
-            datetime.now()}."
-        print(msg)
+        msg = f"{target_func.__name__}: Executing the target function at {datetime.now()}."        print(msg)
         asyncio.create_task(writelog(msg, False))
         try:
             await target_func(*args)  # 비동기 함수가 호출되도록 변경
         except Exception as e:
-            error_msg = f"An error occurred while executing the target function: {
-                str(e)}"
+            error_msg = f"An error occurred while executing the target function: str(e)}"
             print(error_msg)
             asyncio.create_task(writelog(error_msg, False))  # 에러 로그 기록
 
@@ -8688,9 +8609,7 @@ async def main():
                         print(error_msg)
                         await asyncio.sleep(1)  # 1 초 후
                     else:
-                        error_msg = f"Connection error: {
-                            str(e)}. Retrying in 1 second..."
-                        asyncio.create_task(writelog(error_msg, False))
+                        error_msg = f"Connection error: {str(e)}. Retrying in 1 second..."                        asyncio.create_task(writelog(error_msg, False))
                         print(error_msg)
                         await asyncio.sleep(1)  # 1 초 후
         except Exception as e:
