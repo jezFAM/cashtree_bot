@@ -3896,22 +3896,33 @@ async def fetch_with_playwright(url: str, user_agent: str = None) -> Tuple[str, 
             # 페이지 생성 (실제 브라우저처럼 새로운 세션으로 시작)
             page = await context.new_page()
 
-            # WebDriver 속성 제거 및 다양한 봇 감지 우회
+            # WebDriver 속성 제거 및 다양한 봇 감지 우회 (강화된 버전)
             await page.add_init_script("""
-                // WebDriver 속성 제거
+                // WebDriver 속성 완전 제거
                 Object.defineProperty(navigator, 'webdriver', {
-                    get: () => undefined
+                    get: () => false
                 });
 
-                // navigator.webdriver 완전 삭제
-                delete navigator.__proto__.webdriver;
+                delete Object.getPrototypeOf(navigator).webdriver;
 
-                // Chrome 객체 추가
+                // Chrome 객체 추가 (더 완전하게)
                 window.chrome = {
                     runtime: {},
                     loadTimes: function() {},
                     csi: function() {},
-                    app: {}
+                    app: {
+                        isInstalled: false,
+                        InstallState: {
+                            DISABLED: 'disabled',
+                            INSTALLED: 'installed',
+                            NOT_INSTALLED: 'not_installed'
+                        },
+                        RunningState: {
+                            CANNOT_RUN: 'cannot_run',
+                            READY_TO_RUN: 'ready_to_run',
+                            RUNNING: 'running'
+                        }
+                    }
                 };
 
                 // Permissions 덮어쓰기
@@ -3922,13 +3933,36 @@ async def fetch_with_playwright(url: str, user_agent: str = None) -> Tuple[str, 
                         originalQuery(parameters)
                 );
 
-                // Plugins 설정 (실제와 유사하게)
+                // Plugins 설정 (더 현실적으로)
                 Object.defineProperty(navigator, 'plugins', {
-                    get: () => [
-                        {name: 'Chrome PDF Plugin', description: 'Portable Document Format', filename: 'internal-pdf-viewer'},
-                        {name: 'Chrome PDF Viewer', description: '', filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai'},
-                        {name: 'Native Client', description: '', filename: 'internal-nacl-plugin'}
-                    ]
+                    get: () => {
+                        const plugins = [
+                            {
+                                0: {type: 'application/x-google-chrome-pdf', suffixes: 'pdf', description: 'Portable Document Format'},
+                                description: 'Portable Document Format',
+                                filename: 'internal-pdf-viewer',
+                                length: 1,
+                                name: 'Chrome PDF Plugin'
+                            },
+                            {
+                                0: {type: 'application/pdf', suffixes: 'pdf', description: ''},
+                                description: '',
+                                filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai',
+                                length: 1,
+                                name: 'Chrome PDF Viewer'
+                            },
+                            {
+                                0: {type: 'application/x-nacl', suffixes: '', description: 'Native Client Executable'},
+                                1: {type: 'application/x-pnacl', suffixes: '', description: 'Portable Native Client Executable'},
+                                description: '',
+                                filename: 'internal-nacl-plugin',
+                                length: 2,
+                                name: 'Native Client'
+                            }
+                        ];
+                        plugins.length = 3;
+                        return plugins;
+                    }
                 });
 
                 // Languages 설정
@@ -3962,9 +3996,47 @@ async def fetch_with_playwright(url: str, user_agent: str = None) -> Tuple[str, 
                         effectiveType: '4g',
                         rtt: 50,
                         downlink: 10,
-                        saveData: false
+                        saveData: false,
+                        onchange: null,
+                        ontypechange: null
                     })
                 });
+
+                // maxTouchPoints 설정
+                Object.defineProperty(navigator, 'maxTouchPoints', {
+                    get: () => 0
+                });
+
+                // Battery API 숨기기
+                if ('getBattery' in navigator) {
+                    navigator.getBattery = undefined;
+                }
+
+                // WebGL Vendor/Renderer 정보 수정
+                const getParameter = WebGLRenderingContext.prototype.getParameter;
+                WebGLRenderingContext.prototype.getParameter = function(parameter) {
+                    if (parameter === 37445) {
+                        return 'Intel Inc.';
+                    }
+                    if (parameter === 37446) {
+                        return 'Intel Iris OpenGL Engine';
+                    }
+                    return getParameter.apply(this, [parameter]);
+                };
+
+                // Canvas fingerprinting 방지
+                const originalToDataURL = HTMLCanvasElement.prototype.toDataURL;
+                HTMLCanvasElement.prototype.toDataURL = function(type) {
+                    if (type === 'image/png' && this.width === 16 && this.height === 16) {
+                        return originalToDataURL.apply(this, arguments);
+                    }
+                    return originalToDataURL.apply(this, arguments);
+                };
+
+                // Notification.permission 설정
+                if ('Notification' in window) {
+                    Notification.permission = 'default';
+                }
             """)
 
             # 먼저 네이버 메인 페이지 방문 (정상 사용자 행동 모방, 쿠키 획득)
