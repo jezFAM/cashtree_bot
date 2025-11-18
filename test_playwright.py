@@ -23,17 +23,14 @@ async def fetch_with_playwright(url: str, user_agent: str = None) -> Tuple[str, 
     try:
         async with async_playwright() as p:
             print(f"🚀 브라우저 시작 중...")
-            # Chromium 브라우저 시작
+            # Chromium 브라우저 시작 (최소 옵션으로 안정성 확보)
             browser = await p.chromium.launch(
                 headless=True,
                 args=[
                     '--disable-blink-features=AutomationControlled',
                     '--no-sandbox',
                     '--disable-setuid-sandbox',
-                    '--disable-dev-shm-usage',  # /dev/shm 파티션 사용 비활성화
-                    '--disable-accelerated-2d-canvas',  # 2D 캔버스 가속 비활성화
-                    '--disable-gpu',  # GPU 가속 비활성화
-                    # '--single-process' 제거: 단일 프로세스 모드는 불안정하여 브라우저 크래시 유발
+                    '--disable-dev-shm-usage',
                 ]
             )
 
@@ -136,26 +133,10 @@ async def fetch_with_playwright(url: str, user_agent: str = None) -> Tuple[str, 
                 });
             """)
 
-            # 먼저 네이버 메인 페이지 방문 (정상 사용자 행동 모방)
-            print(f"🏠 네이버 메인 페이지 방문 중...")
-            try:
-                await page.goto('https://www.naver.com', wait_until='networkidle', timeout=30000)
-                await page.wait_for_timeout(2000)  # 2초 대기 (쿠키 설정 완료 대기)
-
-                # 마우스 움직임 시뮬레이션 (정상 사용자 행동)
-                await page.mouse.move(100, 100)
-                await page.mouse.move(200, 200)
-                await page.wait_for_timeout(500)
-            except Exception as e:
-                # 메인 페이지 로드 실패해도 계속 진행 (단, CancelledError는 재발생)
-                if isinstance(e, asyncio.CancelledError):
-                    raise
-                print(f"⚠️  네이버 메인 페이지 로드 실패, 계속 진행: {str(e)}")
-
             print(f"🌐 페이지 로드 중: {url}")
-            # Referer 헤더 설정하여 페이지 로드
+            # 직접 타겟 페이지로 이동 (간소화된 접근)
             try:
-                response = await page.goto(url, wait_until='networkidle', timeout=60000, referer='https://www.naver.com/')
+                response = await page.goto(url, wait_until='load', timeout=60000)
                 status_code = response.status if response else 0
             except Exception as e:
                 # 페이지 로드 실패 (타임아웃, 네트워크 오류 등)
