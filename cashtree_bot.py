@@ -3843,17 +3843,15 @@ def extract_key_values_from_script(html_content):
     return results
 
 
-async def fetch_with_playwright(url: str, user_agent: str = None, initial_cookies: List[Dict] = None) -> Tuple[str, int, List[Dict]]:
+async def fetch_with_playwright(url: str, user_agent: str = None) -> Tuple[str, int, List[Dict]]:
     """
     Playwright를 사용하여 URL을 가져옵니다. 네이버의 봇 감지를 우회하기 위한 다양한 기법을 사용합니다.
 
-    초기 검증된 쿠키(NNB, BUC, _fwb 등)를 주입하여 시작하면, 검증된 세션으로 인식되어
-    추가 쿠키를 자연스럽게 받을 수 있습니다.
+    실제 사용자처럼 행동하여 자연스럽게 쿠키를 획득합니다.
 
     Args:
         url: 가져올 URL
         user_agent: 사용할 User-Agent (None이면 기본값 사용)
-        initial_cookies: 초기 쿠키 리스트 (Playwright 형식)
 
     Returns:
         Tuple[str, int, List[Dict]]: (HTML 콘텐츠, HTTP 상태 코드, 브라우저 쿠키 리스트)
@@ -3896,11 +3894,6 @@ async def fetch_with_playwright(url: str, user_agent: str = None, initial_cookie
 
             # 페이지 생성 (실제 브라우저처럼 새로운 세션으로 시작)
             page = await context.new_page()
-
-            # 초기 쿠키가 제공된 경우 먼저 설정 (검증된 세션으로 시작)
-            if initial_cookies:
-                await context.add_cookies(initial_cookies)
-                asyncio.create_task(writelog(f'fetch_with_playwright: Injected {len(initial_cookies)} initial cookies', False))
 
             # WebDriver 속성 제거 및 다양한 봇 감지 우회 (강화된 버전)
             await page.add_init_script("""
@@ -4049,7 +4042,19 @@ async def fetch_with_playwright(url: str, user_agent: str = None, initial_cookie
             try:
                 await page.goto('https://www.naver.com', wait_until='load', timeout=30000)
                 # 충분한 대기 시간을 주어 JavaScript가 쿠키를 설정하도록 함
-                await page.wait_for_timeout(4000)  # 4초 대기 (쿠키 설정 완료 대기)
+                await page.wait_for_timeout(5000)  # 5초 대기 (쿠키 설정 완료 대기)
+
+                # 현실적인 사용자 행동 시뮬레이션
+                try:
+                    # 페이지 스크롤 (사용자처럼 보이기 위해)
+                    await page.evaluate('window.scrollTo(0, 500)')
+                    await page.wait_for_timeout(500)
+                    await page.evaluate('window.scrollTo(0, 1000)')
+                    await page.wait_for_timeout(500)
+                    await page.evaluate('window.scrollTo(0, 0)')
+                    await page.wait_for_timeout(1000)
+                except:
+                    pass  # 스크롤 실패해도 계속 진행
             except Exception as e:
                 # 메인 페이지 로드 실패해도 계속 진행 (단, CancelledError는 재발생)
                 if isinstance(e, asyncio.CancelledError):
@@ -4080,13 +4085,22 @@ async def fetch_with_playwright(url: str, user_agent: str = None, initial_cookie
             try:
                 if status_code == 200:
                     # 추가 대기 (동적 콘텐츠 및 쿠키 설정 완료 대기)
-                    await page.wait_for_timeout(6000)  # 6초 대기 (쿠키 생성 충분히 대기)
+                    await page.wait_for_timeout(8000)  # 8초 대기 (쿠키 생성 충분히 대기)
+
+                    # 현실적인 사용자 행동 시뮬레이션 (타겟 페이지에서도)
+                    try:
+                        await page.evaluate('window.scrollTo(0, 300)')
+                        await page.wait_for_timeout(1000)
+                        await page.evaluate('window.scrollTo(0, 600)')
+                        await page.wait_for_timeout(1000)
+                    except:
+                        pass
 
                     # HTML 콘텐츠 가져오기
                     html_content = await page.content()
                 elif status_code:
                     # 상태 코드가 있지만 200이 아닌 경우 (403, 429 등)
-                    await page.wait_for_timeout(2000)  # 짧게 대기
+                    await page.wait_for_timeout(3000)  # 짧게 대기
                     html_content = await page.content()
                 else:
                     html_content = ""
@@ -4141,46 +4155,11 @@ async def get_store_answer(store_url, cnt, interval, pattern):
         with tqdm(total=100, desc=primary_key, leave=False, dynamic_ncols=True) as progress_bar:
             while try_count < 3:
                 try:
-                    # BrowserLikeClient의 초기 쿠키(NNB, BUC, _fwb)를 Playwright 형식으로 변환
-                    initial_cookies = []
-                    parsed_url = urllib.parse.urlparse(store_url)
-                    domain = parsed_url.netloc if parsed_url.netloc else '.naver.com'
-
-                    # 검증된 초기 쿠키 추가 (있는 경우)
-                    if client.store_nnb:
-                        initial_cookies.append({
-                            'name': 'NNB',
-                            'value': client.store_nnb,
-                            'domain': '.naver.com',
-                            'path': '/',
-                            'httpOnly': False,
-                            'secure': False
-                        })
-                    if client.store_buc:
-                        initial_cookies.append({
-                            'name': 'BUC',
-                            'value': client.store_buc,
-                            'domain': '.naver.com',
-                            'path': '/',
-                            'httpOnly': True,
-                            'secure': True
-                        })
-                    if client.store_fwb:
-                        initial_cookies.append({
-                            'name': '_fwb',
-                            'value': client.store_fwb,
-                            'domain': '.naver.com',
-                            'path': '/',
-                            'httpOnly': True,
-                            'secure': True
-                        })
-
-                    # Playwright를 사용하여 페이지 가져오기 (초기 쿠키 주입)
-                    # 검증된 세션 쿠키로 시작하여 추가 쿠키를 자연스럽게 획득
+                    # Playwright를 사용하여 페이지 가져오기
+                    # 실제 사용자처럼 행동하여 자연스럽게 쿠키를 획득
                     html, status_code, browser_cookies = await fetch_with_playwright(
                         store_url,
-                        user_agent=dataInfo.User_Agent,
-                        initial_cookies=initial_cookies if initial_cookies else None
+                        user_agent=dataInfo.User_Agent
                     )
 
                     # Playwright에서 얻은 쿠키를 httpx 클라이언트에 적용 (API 요청 시 사용)
