@@ -10,16 +10,15 @@ from typing import Dict, Tuple
 from playwright.async_api import async_playwright
 
 
-async def fetch_with_playwright(url: str, user_agent: str = None) -> Tuple[str, int, list]:
+async def fetch_with_playwright(url: str) -> Tuple[str, int, list, str]:
     """
     Playwright를 사용하여 URL을 가져옵니다. 네이버의 봇 감지를 우회하기 위한 다양한 기법을 사용합니다.
 
     Args:
         url: 가져올 URL
-        user_agent: 사용할 User-Agent (None이면 기본값 사용)
 
     Returns:
-        Tuple[str, int, list]: (HTML 콘텐츠, HTTP 상태 코드, 브라우저 쿠키)
+        Tuple[str, int, list, str]: (HTML 콘텐츠, HTTP 상태 코드, 브라우저 쿠키, 사용한 User-Agent)
     """
     try:
         async with async_playwright() as p:
@@ -34,6 +33,9 @@ async def fetch_with_playwright(url: str, user_agent: str = None) -> Tuple[str, 
                 '--disable-dev-shm-usage',
             ]
 
+            # Edge User-Agent (브라우저와 일치)
+            edge_ua = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0'
+
             # Edge만 사용 (Windows 기본 설치)
             try:
                 print(f"  → Edge 사용 시도 (channel='msedge')...")
@@ -46,12 +48,12 @@ async def fetch_with_playwright(url: str, user_agent: str = None) -> Tuple[str, 
             except Exception as edge_error:
                 # Edge 없으면 조용히 실패 (Chromium은 봇 탐지되므로 사용 안함)
                 print(f"  ❌ Edge not found. {str(edge_error)[:150]}")
-                return "", 0, []
+                return "", 0, [], edge_ua
 
             # 컨텍스트 생성
             context = await browser.new_context(
                 viewport={'width': 1920, 'height': 1080},
-                user_agent=user_agent if user_agent else 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0',
+                user_agent=edge_ua,
                 locale='ko-KR',
                 timezone_id='Asia/Seoul',
                 permissions=[],
@@ -332,12 +334,14 @@ async def fetch_with_playwright(url: str, user_agent: str = None) -> Tuple[str, 
             except:
                 pass  # 브라우저가 이미 닫혔을 수 있음
 
-            return html_content, status_code, browser_cookies
+            return html_content, status_code, browser_cookies, edge_ua
 
     except Exception as e:
         print(f"❌ 오류 발생: {str(e)}")
         print(traceback.format_exc())
-        return "", 0, []
+        # 실패 시에도 Edge UA 반환
+        edge_ua = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0'
+        return "", 0, [], edge_ua
 
 
 async def main():
@@ -351,11 +355,12 @@ async def main():
     print("-" * 80)
 
     # 페이지 가져오기
-    html, status_code, cookies = await fetch_with_playwright(test_url)
+    html, status_code, cookies, user_agent = await fetch_with_playwright(test_url)
 
     print("-" * 80)
     print("결과:")
     print(f"  상태 코드: {status_code}")
+    print(f"  User-Agent: {user_agent}")
     print(f"  쿠키 개수: {len(cookies)}")
 
     if cookies:

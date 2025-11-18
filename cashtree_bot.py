@@ -3862,7 +3862,7 @@ def extract_key_values_from_script(html_content):
     return results
 
 
-async def fetch_with_playwright(url: str, user_agent: str = None) -> Tuple[str, int, List[Dict]]:
+async def fetch_with_playwright(url: str) -> Tuple[str, int, List[Dict], str]:
     """
     Playwright를 사용하여 URL을 가져옵니다. 네이버의 봇 감지를 우회하기 위한 다양한 기법을 사용합니다.
 
@@ -3870,10 +3870,9 @@ async def fetch_with_playwright(url: str, user_agent: str = None) -> Tuple[str, 
 
     Args:
         url: 가져올 URL
-        user_agent: 사용할 User-Agent (None이면 기본값 사용)
 
     Returns:
-        Tuple[str, int, List[Dict]]: (HTML 콘텐츠, HTTP 상태 코드, 브라우저 쿠키 리스트)
+        Tuple[str, int, List[Dict], str]: (HTML 콘텐츠, HTTP 상태 코드, 브라우저 쿠키 리스트, 사용한 User-Agent)
     """
     try:
         async with async_playwright() as p:
@@ -3887,6 +3886,9 @@ async def fetch_with_playwright(url: str, user_agent: str = None) -> Tuple[str, 
                 '--disable-dev-shm-usage',
             ]
 
+            # Edge User-Agent (브라우저와 일치)
+            edge_ua = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0'
+
             # Edge만 사용 (Windows 기본 설치)
             try:
                 browser = await p.chromium.launch(
@@ -3899,12 +3901,12 @@ async def fetch_with_playwright(url: str, user_agent: str = None) -> Tuple[str, 
                 # Edge 없으면 조용히 실패 (Chromium은 봇 탐지되므로 사용 안함)
                 msg = f'fetch_with_playwright: Edge not found. {str(edge_error)[:150]}'
                 asyncio.create_task(writelog(msg, False))
-                return "", 0, []
+                return "", 0, [], edge_ua
 
             # 컨텍스트 생성
             context = await browser.new_context(
                 viewport={'width': 1920, 'height': 1080},
-                user_agent=user_agent if user_agent else 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0',
+                user_agent=edge_ua,
                 locale='ko-KR',
                 timezone_id='Asia/Seoul',
                 permissions=[],
@@ -4166,12 +4168,14 @@ async def fetch_with_playwright(url: str, user_agent: str = None) -> Tuple[str, 
             except:
                 pass  # 브라우저가 이미 닫혔을 수 있음
 
-            return html_content, status_code, browser_cookies
+            return html_content, status_code, browser_cookies, edge_ua
 
     except Exception as e:
         msg = f'fetch_with_playwright error: {str(e)}\n{traceback.format_exc()}'
         asyncio.create_task(writelog(msg, False))
-        return "", 0, []
+        # 실패 시에도 Edge UA 반환
+        edge_ua = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0'
+        return "", 0, [], edge_ua
 
 
 async def get_store_answer(store_url, cnt, interval, pattern):
@@ -4202,10 +4206,12 @@ async def get_store_answer(store_url, cnt, interval, pattern):
                 try:
                     # Playwright를 사용하여 페이지 가져오기
                     # 실제 사용자처럼 행동하여 자연스럽게 쿠키를 획득
-                    html, status_code, browser_cookies = await fetch_with_playwright(
-                        store_url,
-                        user_agent=dataInfo.User_Agent
-                    )
+                    html, status_code, browser_cookies, playwright_ua = await fetch_with_playwright(store_url)
+
+                    # Playwright에서 사용한 User-Agent를 httpx 클라이언트에도 적용 (브라우저-UA 일치)
+                    client.update_user_agent(playwright_ua)
+                    asyncio.create_task(
+                        writelog(f'Updated client User-Agent to match Playwright: {playwright_ua}', False))
 
                     # Playwright에서 얻은 쿠키를 httpx 클라이언트에 적용 (API 요청 시 사용)
                     if browser_cookies:
