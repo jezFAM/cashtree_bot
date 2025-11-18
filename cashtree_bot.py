@@ -3972,8 +3972,8 @@ async def fetch_with_playwright(url: str, user_agent: str = None) -> Tuple[str, 
 
             # 먼저 네이버 메인 페이지 방문 (정상 사용자 행동 모방)
             try:
-                await page.goto('https://www.naver.com', wait_until='domcontentloaded', timeout=30000)
-                await page.wait_for_timeout(1000)  # 1초 대기
+                await page.goto('https://www.naver.com', wait_until='networkidle', timeout=30000)
+                await page.wait_for_timeout(2000)  # 2초 대기 (쿠키 설정 완료 대기)
 
                 # 마우스 움직임 시뮬레이션 (정상 사용자 행동)
                 await page.mouse.move(100, 100)
@@ -3987,7 +3987,7 @@ async def fetch_with_playwright(url: str, user_agent: str = None) -> Tuple[str, 
 
             # 페이지 로드 (타임아웃 60초) with Referer 헤더
             try:
-                response = await page.goto(url, wait_until='domcontentloaded', timeout=60000, referer='https://www.naver.com/')
+                response = await page.goto(url, wait_until='networkidle', timeout=60000, referer='https://www.naver.com/')
                 status_code = response.status if response else 0
             except Exception as e:
                 # 페이지 로드 실패 (타임아웃, 네트워크 오류 등)
@@ -4008,8 +4008,8 @@ async def fetch_with_playwright(url: str, user_agent: str = None) -> Tuple[str, 
 
             try:
                 if status_code == 200:
-                    # 추가 대기 (동적 콘텐츠 로드)
-                    await page.wait_for_timeout(3000)  # 3초 대기
+                    # 추가 대기 (동적 콘텐츠 및 쿠키 설정 완료 대기)
+                    await page.wait_for_timeout(5000)  # 5초 대기 (쿠키 생성 충분히 대기)
 
                     # HTML 콘텐츠 가져오기
                     html_content = await page.content()
@@ -4018,6 +4018,9 @@ async def fetch_with_playwright(url: str, user_agent: str = None) -> Tuple[str, 
 
                 # 브라우저에서 쿠키 가져오기 (API 요청에 사용하기 위해)
                 browser_cookies = await context.cookies()
+
+                # 디버깅: 쿠키 개수 로그
+                asyncio.create_task(writelog(f'fetch_with_playwright: Retrieved {len(browser_cookies)} cookies from {url}', False))
             except Exception as e:
                 # 브라우저가 크래시되었거나 페이지가 닫힌 경우
                 asyncio.create_task(writelog(f'fetch_with_playwright: Browser error while processing {url}: {str(e)}', False))

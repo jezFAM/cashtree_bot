@@ -139,8 +139,8 @@ async def fetch_with_playwright(url: str, user_agent: str = None) -> Tuple[str, 
             # 먼저 네이버 메인 페이지 방문 (정상 사용자 행동 모방)
             print(f"🏠 네이버 메인 페이지 방문 중...")
             try:
-                await page.goto('https://www.naver.com', wait_until='domcontentloaded', timeout=30000)
-                await page.wait_for_timeout(1000)  # 1초 대기
+                await page.goto('https://www.naver.com', wait_until='networkidle', timeout=30000)
+                await page.wait_for_timeout(2000)  # 2초 대기 (쿠키 설정 완료 대기)
 
                 # 마우스 움직임 시뮬레이션 (정상 사용자 행동)
                 await page.mouse.move(100, 100)
@@ -155,7 +155,7 @@ async def fetch_with_playwright(url: str, user_agent: str = None) -> Tuple[str, 
             print(f"🌐 페이지 로드 중: {url}")
             # Referer 헤더 설정하여 페이지 로드
             try:
-                response = await page.goto(url, wait_until='domcontentloaded', timeout=60000, referer='https://www.naver.com/')
+                response = await page.goto(url, wait_until='networkidle', timeout=60000, referer='https://www.naver.com/')
                 status_code = response.status if response else 0
             except Exception as e:
                 # 페이지 로드 실패 (타임아웃, 네트워크 오류 등)
@@ -177,9 +177,9 @@ async def fetch_with_playwright(url: str, user_agent: str = None) -> Tuple[str, 
             browser_cookies = []
 
             try:
-                print(f"⏳ 동적 콘텐츠 로딩 대기 중...")
-                # 추가 대기 (동적 콘텐츠 로드)
-                await page.wait_for_timeout(3000)  # 3초 대기
+                print(f"⏳ 동적 콘텐츠 및 쿠키 설정 대기 중...")
+                # 추가 대기 (동적 콘텐츠 및 쿠키 설정 완료 대기)
+                await page.wait_for_timeout(5000)  # 5초 대기 (쿠키 생성 충분히 대기)
 
                 # HTML 콘텐츠 가져오기 (모든 상태 코드에 대해)
                 html_content = await page.content()
@@ -189,6 +189,12 @@ async def fetch_with_playwright(url: str, user_agent: str = None) -> Tuple[str, 
 
                 print(f"📄 HTML 길이: {len(html_content)} bytes")
                 print(f"🍪 쿠키 개수: {len(browser_cookies)}")
+
+                # 쿠키 상세 정보 출력
+                if browser_cookies:
+                    print(f"🍪 쿠키 상세:")
+                    for cookie in browser_cookies:
+                        print(f"  - {cookie['name']}: {cookie['domain']}")
             except Exception as e:
                 # 브라우저가 크래시되었거나 페이지가 닫힌 경우
                 print(f"❌ 브라우저 오류: {str(e)}")
