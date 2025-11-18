@@ -21,11 +21,6 @@ import time
 import uuid
 import urllib
 
-# ★★★★★ PyInstaller 단일 파일 실행 시 시스템 Chrome 사용 설정 ★★★★★
-if getattr(sys, 'frozen', False):
-    # Playwright가 번들 브라우저 찾는 걸 완전히 차단 → 시스템 Chrome만 사용
-    os.environ["PLAYWRIGHT_BROWSERS_PATH"] = "0"
-
 from asyncio import Lock
 from collections import defaultdict
 from typing import Optional, Dict, List, Any, Union, Tuple
@@ -47,6 +42,21 @@ from urllib.parse import urlparse
 from httpx import AsyncClient, Limits, RequestError
 from httpx_socks import AsyncProxyTransport
 from concurrent.futures import ThreadPoolExecutor
+
+# ★★★★★ 이 부분이 핵심! exe 안에서만 실행되게 ★★★★★
+if getattr(sys, 'frozen', False):
+    # Playwright가 번들 브라우저 찾는 걸 완전히 차단 → 시스템 Chrome만 사용
+    os.environ["PLAYWRIGHT_BROWSERS_PATH"] = "0"
+
+    # 만약 Chrome 경로가 비표준이라면 보험으로 추가 (필수 아님)
+    # possible_chrome_paths = [
+    #     r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+    #     r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+    # ]
+    # for path in possible_chrome_paths:
+    #     if os.path.exists(path):
+    #         os.environ["PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH"] = path
+    #         break
 
 from playwright.async_api import async_playwright, Browser, BrowserContext, Page
 
@@ -1490,16 +1500,19 @@ class BrowserLikeClient:
             Playwright 형식의 쿠키 리스트
         """
         # CookieManager에서 기존 쿠키 가져오기
-        playwright_cookies = self.cookie_manager.get_cookies_for_playwright(url)
+        playwright_cookies = self.cookie_manager.get_cookies_for_playwright(
+            url)
 
         # 도메인 확인
         parsed_url = urllib.parse.urlparse(url)
         hostname = parsed_url.netloc
-        is_naver_domain = hostname.endswith('.naver.com') or hostname == 'naver.com'
+        is_naver_domain = hostname.endswith(
+            '.naver.com') or hostname == 'naver.com'
 
         if is_naver_domain:
             # 기존 쿠키 이름 목록
-            existing_cookie_names = {cookie['name'] for cookie in playwright_cookies}
+            existing_cookie_names = {cookie['name']
+                                     for cookie in playwright_cookies}
 
             # 초기 쿠키 추가 (중복되지 않은 경우만)
             if self.store_nnb and 'NNB' not in existing_cookie_names:
@@ -3864,64 +3877,29 @@ async def fetch_with_playwright(url: str, user_agent: str = None) -> Tuple[str, 
     """
     try:
         async with async_playwright() as p:
-            # 실제 Chrome/Edge 바이너리 사용 (더 탐지하기 어려움)
-            browser = None
-
-            # 시스템 브라우저 경로 찾기
-            browser_paths = [
-                r"C:\Program Files\Google\Chrome\Application\chrome.exe",
-                r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
-                r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
-                r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
-            ]
-
-            launch_args = [
-                '--disable-blink-features=AutomationControlled',
-                '--no-sandbox',
-                '--disable-setuid-sandbox',
-                '--disable-dev-shm-usage',
-            ]
-
-            # 1. channel='chrome' 시도
+            # 실제 Chrome 바이너리 사용 (더 탐지하기 어려움)
             try:
                 browser = await p.chromium.launch(
-                    channel='chrome',
+                    channel='msedge',  # 실제 Chrome 사용
                     headless=True,
-                    args=launch_args
+                    args=[
+                        '--disable-blink-features=AutomationControlled',
+                        '--no-sandbox',
+                        '--disable-setuid-sandbox',
+                        '--disable-dev-shm-usage',
+                    ]
                 )
-                asyncio.create_task(writelog(f'fetch_with_playwright: Using Chrome (channel=chrome)', False))
-            except Exception as chrome_error:
-                asyncio.create_task(writelog(f'fetch_with_playwright: channel=chrome failed: {str(chrome_error)[:100]}', False))
-
-                # 2. channel='msedge' 시도
-                try:
-                    browser = await p.chromium.launch(
-                        channel='msedge',
-                        headless=True,
-                        args=launch_args
-                    )
-                    asyncio.create_task(writelog(f'fetch_with_playwright: Using Edge (channel=msedge)', False))
-                except Exception as edge_error:
-                    asyncio.create_task(writelog(f'fetch_with_playwright: channel=msedge failed: {str(edge_error)[:100]}', False))
-
-                    # 3. 직접 경로로 시도
-                    for browser_path in browser_paths:
-                        if os.path.exists(browser_path):
-                            try:
-                                browser = await p.chromium.launch(
-                                    executable_path=browser_path,
-                                    headless=True,
-                                    args=launch_args
-                                )
-                                asyncio.create_task(writelog(f'fetch_with_playwright: Using browser at {browser_path}', False))
-                                break
-                            except Exception as path_error:
-                                asyncio.create_task(writelog(f'fetch_with_playwright: Failed at {browser_path}: {str(path_error)[:100]}', False))
-                                continue
-
-                    # 모든 시도가 실패하면 에러
-                    if browser is None:
-                        raise Exception("No Chrome or Edge browser found. Please install Chrome/Edge or ensure PLAYWRIGHT_BROWSERS_PATH is set correctly.")
+            except:
+                # Chrome이 없으면 Chromium 사용
+                browser = await p.chromium.launch(
+                    headless=True,
+                    args=[
+                        '--disable-blink-features=AutomationControlled',
+                        '--no-sandbox',
+                        '--disable-setuid-sandbox',
+                        '--disable-dev-shm-usage',
+                    ]
+                )
 
             # 컨텍스트 생성
             context = await browser.new_context(
@@ -4113,7 +4091,8 @@ async def fetch_with_playwright(url: str, user_agent: str = None) -> Tuple[str, 
                 # 메인 페이지 로드 실패해도 계속 진행 (단, CancelledError는 재발생)
                 if isinstance(e, asyncio.CancelledError):
                     raise
-                asyncio.create_task(writelog(f'fetch_with_playwright: Naver main page load failed: {str(e)}', False))
+                asyncio.create_task(writelog(
+                    f'fetch_with_playwright: Naver main page load failed: {str(e)}', False))
 
             # 페이지 로드 (타임아웃 60초) with Referer 헤더
             try:
@@ -4121,7 +4100,8 @@ async def fetch_with_playwright(url: str, user_agent: str = None) -> Tuple[str, 
                 status_code = response.status if response else 0
             except Exception as e:
                 # 페이지 로드 실패 (타임아웃, 네트워크 오류 등)
-                asyncio.create_task(writelog(f'fetch_with_playwright: Failed to load {url}: {str(e)}', False))
+                asyncio.create_task(
+                    writelog(f'fetch_with_playwright: Failed to load {url}: {str(e)}', False))
                 status_code = 0
                 html_content = ""
                 browser_cookies = []
@@ -4173,10 +4153,12 @@ async def fetch_with_playwright(url: str, user_agent: str = None) -> Tuple[str, 
 
                 # 디버깅: 쿠키 개수와 이름 로그
                 cookie_names = [c['name'] for c in browser_cookies]
-                asyncio.create_task(writelog(f'fetch_with_playwright: Retrieved {len(browser_cookies)} cookies from {url}: {cookie_names}', False))
+                asyncio.create_task(writelog(
+                    f'fetch_with_playwright: Retrieved {len(browser_cookies)} cookies from {url}: {cookie_names}', False))
             except Exception as e:
                 # 브라우저가 크래시되었거나 페이지가 닫힌 경우
-                asyncio.create_task(writelog(f'fetch_with_playwright: Browser error while processing {url}: {str(e)}', False))
+                asyncio.create_task(writelog(
+                    f'fetch_with_playwright: Browser error while processing {url}: {str(e)}', False))
 
             # 브라우저 종료
             try:
@@ -4227,7 +4209,8 @@ async def get_store_answer(store_url, cnt, interval, pattern):
 
                     # Playwright에서 얻은 쿠키를 httpx 클라이언트에 적용 (API 요청 시 사용)
                     if browser_cookies:
-                        client.cookie_manager.set_cookies_from_playwright(browser_cookies, store_url)
+                        client.cookie_manager.set_cookies_from_playwright(
+                            browser_cookies, store_url)
                         asyncio.create_task(
                             writelog(f'Applied {len(browser_cookies)} cookies from Playwright to httpx client for {store_url}', False))
 
