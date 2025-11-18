@@ -2733,11 +2733,17 @@ async def get_place_answer(place_url, cnt, interval, pattern):
                     existing_cookies = client.get_playwright_cookies(info_url)
 
                     # Playwright를 사용하여 페이지 가져오기 (봇 감지 우회, 기존 쿠키 전달)
-                    html, status_code, browser_cookies = await fetch_with_playwright(
+                    html, status_code, browser_cookies, actual_user_agent = await fetch_with_playwright(
                         info_url,
                         user_agent=None,  # Playwright가 자동으로 생성
                         cookies=existing_cookies
                     )
+
+                    # Playwright가 사용한 User-Agent를 BrowserLikeClient에 동기화 (일관성 유지)
+                    if actual_user_agent and actual_user_agent != client.user_agent:
+                        client.update_user_agent(actual_user_agent)
+                        asyncio.create_task(
+                            writelog(f'[User-Agent Sync] Updated BrowserLikeClient User-Agent to match Playwright', False))
 
                     # Playwright에서 얻은 쿠키를 httpx 클라이언트에 적용 (API 요청 시 사용)
                     if browser_cookies:
@@ -3656,11 +3662,17 @@ async def get_kakao_place_answer(place_url, cnt, interval, pattern):
         try:
             # 먼저 카카오맵 페이지 방문해서 쿠키 가져오기
             existing_cookies = client.get_playwright_cookies(place_url)
-            _, status_code, browser_cookies = await fetch_with_playwright(
+            _, status_code, browser_cookies, actual_user_agent = await fetch_with_playwright(
                 place_url,
                 user_agent=None,  # Playwright가 자동으로 생성
                 cookies=existing_cookies
             )
+
+            # Playwright가 사용한 User-Agent를 BrowserLikeClient에 동기화 (일관성 유지)
+            if actual_user_agent and actual_user_agent != client.user_agent:
+                client.update_user_agent(actual_user_agent)
+                asyncio.create_task(
+                    writelog(f'[User-Agent Sync] Updated BrowserLikeClient User-Agent to match Playwright', False))
 
             # Playwright에서 얻은 쿠키를 httpx 클라이언트에 적용
             if browser_cookies:
@@ -3900,7 +3912,7 @@ def extract_key_values_from_script(html_content):
     return results
 
 
-async def fetch_with_playwright(url: str, user_agent: str = None, cookies: Dict = None) -> Tuple[str, int, List[Dict]]:
+async def fetch_with_playwright(url: str, user_agent: str = None, cookies: Dict = None) -> Tuple[str, int, List[Dict], str]:
     """
     Playwright를 사용하여 URL을 가져옵니다. 최소한의 수정으로 자연스러운 브라우저 동작을 시뮬레이션합니다.
 
@@ -3910,7 +3922,7 @@ async def fetch_with_playwright(url: str, user_agent: str = None, cookies: Dict 
         cookies: 설정할 쿠키들
 
     Returns:
-        Tuple[str, int, List[Dict]]: (HTML 콘텐츠, HTTP 상태 코드, 브라우저 쿠키 리스트)
+        Tuple[str, int, List[Dict], str]: (HTML 콘텐츠, HTTP 상태 코드, 브라우저 쿠키 리스트, 실제 사용된 User-Agent)
     """
     import random
 
@@ -3993,16 +4005,18 @@ async def fetch_with_playwright(url: str, user_agent: str = None, cookies: Dict 
                 status_code = 0
                 html_content = ""
                 browser_cookies = []
+                actual_user_agent = ""
 
                 try:
                     await browser.close()
                 except:
                     pass  # 브라우저가 이미 닫혔을 수 있음
 
-                return html_content, status_code, browser_cookies
+                return html_content, status_code, browser_cookies, actual_user_agent
 
             html_content = ""
             browser_cookies = []
+            actual_user_agent = ""
 
             try:
                 if status_code == 200:
@@ -4013,6 +4027,14 @@ async def fetch_with_playwright(url: str, user_agent: str = None, cookies: Dict 
                     html_content = await page.content()
                 else:
                     html_content = await page.content() if status_code else ""
+
+                # 브라우저에서 실제 사용된 User-Agent 가져오기 (BrowserLikeClient와 일관성 유지)
+                try:
+                    actual_user_agent = await page.evaluate('() => navigator.userAgent')
+                    asyncio.create_task(
+                        writelog(f'[Playwright] Actual User-Agent: {actual_user_agent}', False))
+                except Exception as ua_error:
+                    asyncio.create_task(writelog(f'[Playwright] Failed to get User-Agent: {str(ua_error)}', False))
 
                 # 브라우저에서 쿠키 가져오기 (API 요청에 사용하기 위해)
                 browser_cookies = await context.cookies()
@@ -4035,12 +4057,12 @@ async def fetch_with_playwright(url: str, user_agent: str = None, cookies: Dict 
             except:
                 pass  # 브라우저가 이미 닫혔을 수 있음
 
-            return html_content, status_code, browser_cookies
+            return html_content, status_code, browser_cookies, actual_user_agent
 
     except Exception as e:
         msg = f'fetch_with_playwright error: {str(e)}\n{traceback.format_exc()}'
         asyncio.create_task(writelog(msg, False))
-        return "", 0, []
+        return "", 0, [], ""
 
 
 async def get_store_answer(store_url, cnt, interval, pattern):
@@ -4074,11 +4096,17 @@ async def get_store_answer(store_url, cnt, interval, pattern):
 
                     # Playwright를 사용하여 페이지 가져오기 (봇 감지 우회, 기존 쿠키 전달)
                     # user_agent를 전달하지 않아 Playwright가 자동으로 올바른 User-Agent 생성
-                    html, status_code, browser_cookies = await fetch_with_playwright(
+                    html, status_code, browser_cookies, actual_user_agent = await fetch_with_playwright(
                         store_url,
                         user_agent=None,  # Playwright가 자동으로 생성
                         cookies=existing_cookies
                     )
+
+                    # Playwright가 사용한 User-Agent를 BrowserLikeClient에 동기화 (일관성 유지)
+                    if actual_user_agent and actual_user_agent != client.user_agent:
+                        client.update_user_agent(actual_user_agent)
+                        asyncio.create_task(
+                            writelog(f'[User-Agent Sync] Updated BrowserLikeClient User-Agent to match Playwright', False))
 
                     # Playwright에서 얻은 쿠키를 httpx 클라이언트에 적용 (API 요청 시 사용)
                     if browser_cookies:
