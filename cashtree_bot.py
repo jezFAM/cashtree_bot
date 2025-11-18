@@ -2955,13 +2955,38 @@ async def get_place_answer(place_url, cnt, interval, pattern):
 
         return list(dict.fromkeys(answer_list)), isSuccess
 
-    # BrowserLikeClient 생성 (Playwright 없이 직접 요청하므로 모든 쿠키 필요)
+    # Playwright로 네이버에 접속해서 유효한 쿠키 얻기
+    try:
+        _, _, browser_cookies = await fetch_with_playwright(
+            'https://m.place.naver.com/',
+            user_agent=dataInfo.User_Agent
+        )
+        # 쿠키에서 NNB, FWB, BUC 값 추출
+        store_nnb_from_browser = dataInfo.store_nnb
+        store_fwb_from_browser = dataInfo.store_fwb
+        store_buc_from_browser = dataInfo.store_buc
+
+        for cookie in browser_cookies:
+            if cookie.get('name') == 'NNB':
+                store_nnb_from_browser = cookie.get('value')
+            elif cookie.get('name') == 'nid_inf':
+                store_fwb_from_browser = cookie.get('value')
+            elif cookie.get('name') == 'nid_buk':
+                store_buc_from_browser = cookie.get('value')
+    except Exception as e:
+        # Playwright 실패 시 기존 쿠키 사용
+        asyncio.create_task(writelog(f'get_place_answer: fetch_with_playwright 실패, 기존 쿠키 사용: {str(e)}', False))
+        store_nnb_from_browser = dataInfo.store_nnb
+        store_fwb_from_browser = dataInfo.store_fwb
+        store_buc_from_browser = dataInfo.store_buc
+
+    # BrowserLikeClient 생성 (Playwright로 얻은 쿠키 사용)
     client = BrowserLikeClient(
         user_agent=dataInfo.User_Agent,
         store_token=dataInfo.store_token,
-        store_nnb=dataInfo.store_nnb,
-        store_fwb=dataInfo.store_fwb,
-        store_buc=dataInfo.store_buc,
+        store_nnb=store_nnb_from_browser,
+        store_fwb=store_fwb_from_browser,
+        store_buc=store_buc_from_browser,
         proxy_config=proxyInfo.url)
 
     # refresh 버퍼에 추가
@@ -3748,13 +3773,38 @@ async def get_kakao_place_answer(place_url, cnt, interval, pattern):
 
         return list(dict.fromkeys(answer_list)), isSuccess
 
-    # BrowserLikeClient 생성 (Playwright 없이 직접 요청하므로 모든 쿠키 필요)
+    # Playwright로 카카오맵에 접속해서 유효한 쿠키 얻기
+    try:
+        _, _, browser_cookies = await fetch_with_playwright(
+            'https://place.map.kakao.com/',
+            user_agent=dataInfo.User_Agent
+        )
+        # 쿠키에서 필요한 값 추출 (카카오맵용)
+        store_nnb_from_browser = dataInfo.store_nnb
+        store_fwb_from_browser = dataInfo.store_fwb
+        store_buc_from_browser = dataInfo.store_buc
+
+        for cookie in browser_cookies:
+            if cookie.get('name') == 'NNB':
+                store_nnb_from_browser = cookie.get('value')
+            elif cookie.get('name') == 'nid_inf':
+                store_fwb_from_browser = cookie.get('value')
+            elif cookie.get('name') == 'nid_buk':
+                store_buc_from_browser = cookie.get('value')
+    except Exception as e:
+        # Playwright 실패 시 기존 쿠키 사용
+        asyncio.create_task(writelog(f'get_kakao_place_answer: fetch_with_playwright 실패, 기존 쿠키 사용: {str(e)}', False))
+        store_nnb_from_browser = dataInfo.store_nnb
+        store_fwb_from_browser = dataInfo.store_fwb
+        store_buc_from_browser = dataInfo.store_buc
+
+    # BrowserLikeClient 생성 (Playwright로 얻은 쿠키 사용)
     client = BrowserLikeClient(
         user_agent=dataInfo.User_Agent,
         store_token=dataInfo.store_token,
-        store_nnb=dataInfo.store_nnb,
-        store_fwb=dataInfo.store_fwb,
-        store_buc=dataInfo.store_buc,
+        store_nnb=store_nnb_from_browser,
+        store_fwb=store_fwb_from_browser,
+        store_buc=store_buc_from_browser,
         proxy_config=proxyInfo.url)
 
     # refresh 버퍼에 추가
