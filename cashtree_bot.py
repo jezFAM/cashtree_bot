@@ -1,4 +1,5 @@
 import os
+import sys
 import io
 import traceback
 import ctypes
@@ -42,8 +43,22 @@ from httpx import AsyncClient, Limits, RequestError
 from httpx_socks import AsyncProxyTransport
 from concurrent.futures import ThreadPoolExecutor
 
+# ★★★★★ 이 부분이 핵심! exe 안에서만 실행되게 ★★★★★
+if getattr(sys, 'frozen', False):
+    # Playwright가 번들 브라우저 찾는 걸 완전히 차단 → 시스템 Chrome만 사용
+    os.environ["PLAYWRIGHT_BROWSERS_PATH"] = "0"
+
+    # 만약 Chrome 경로가 비표준이라면 보험으로 추가 (필수 아님)
+    # possible_chrome_paths = [
+    #     r"C:\Program Files\Google\Chrome\Application\chrome.exe",
+    #     r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
+    # ]
+    # for path in possible_chrome_paths:
+    #     if os.path.exists(path):
+    #         os.environ["PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH"] = path
+    #         break
+
 from playwright.async_api import async_playwright, Browser, BrowserContext, Page
-from playwright_stealth import Stealth
 
 # 한글깨짐 처리
 os.putenv('NLS_LANG', 'KOREAN_KOREA.KO16KSC5601')
@@ -1485,16 +1500,19 @@ class BrowserLikeClient:
             Playwright 형식의 쿠키 리스트
         """
         # CookieManager에서 기존 쿠키 가져오기
-        playwright_cookies = self.cookie_manager.get_cookies_for_playwright(url)
+        playwright_cookies = self.cookie_manager.get_cookies_for_playwright(
+            url)
 
         # 도메인 확인
         parsed_url = urllib.parse.urlparse(url)
         hostname = parsed_url.netloc
-        is_naver_domain = hostname.endswith('.naver.com') or hostname == 'naver.com'
+        is_naver_domain = hostname.endswith(
+            '.naver.com') or hostname == 'naver.com'
 
         if is_naver_domain:
             # 기존 쿠키 이름 목록
-            existing_cookie_names = {cookie['name'] for cookie in playwright_cookies}
+            existing_cookie_names = {cookie['name']
+                                     for cookie in playwright_cookies}
 
             # 초기 쿠키 추가 (중복되지 않은 경우만)
             if self.store_nnb and 'NNB' not in existing_cookie_names:
@@ -3844,38 +3862,51 @@ def extract_key_values_from_script(html_content):
     return results
 
 
-async def fetch_with_playwright(url: str, user_agent: str = None, cookies: Dict = None) -> Tuple[str, int, List[Dict]]:
+async def fetch_with_playwright(url: str) -> Tuple[str, int, List[Dict], str]:
     """
     Playwright를 사용하여 URL을 가져옵니다. 네이버의 봇 감지를 우회하기 위한 다양한 기법을 사용합니다.
 
+    실제 사용자처럼 행동하여 자연스럽게 쿠키를 획득합니다.
+
     Args:
         url: 가져올 URL
-        user_agent: 사용할 User-Agent (None이면 기본값 사용)
-        cookies: 설정할 쿠키들
 
     Returns:
-        Tuple[str, int, List[Dict]]: (HTML 콘텐츠, HTTP 상태 코드, 브라우저 쿠키 리스트)
+        Tuple[str, int, List[Dict], str]: (HTML 콘텐츠, HTTP 상태 코드, 브라우저 쿠키 리스트, 사용한 User-Agent)
     """
     try:
         async with async_playwright() as p:
-            # Chromium 브라우저 시작
-            browser = await p.chromium.launch(
-                headless=True,  # headless 모드 사용
-                args=[
-                    '--disable-blink-features=AutomationControlled',  # 자동화 감지 비활성화
-                    '--no-sandbox',
-                    '--disable-setuid-sandbox',
-                    '--disable-dev-shm-usage',  # /dev/shm 파티션 사용 비활성화
-                    '--disable-accelerated-2d-canvas',  # 2D 캔버스 가속 비활성화
-                    '--disable-gpu',  # GPU 가속 비활성화
-                    # '--single-process' 제거: 단일 프로세스 모드는 불안정하여 브라우저 크래시 유발
-                ]
-            )
+            # 실제 Chrome/Edge 바이너리 사용 (Chromium은 봇 탐지됨)
+            browser = None
+
+            launch_args = [
+                '--disable-blink-features=AutomationControlled',
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+            ]
+
+            # Edge User-Agent (브라우저와 일치)
+            edge_ua = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0'
+
+            # Edge만 사용 (Windows 기본 설치)
+            try:
+                browser = await p.chromium.launch(
+                    channel='msedge',
+                    headless=True,
+                    args=launch_args
+                )
+                asyncio.create_task(writelog(f'fetch_with_playwright: Using Edge (channel=msedge)', False))
+            except Exception as edge_error:
+                # Edge 없으면 조용히 실패 (Chromium은 봇 탐지되므로 사용 안함)
+                msg = f'fetch_with_playwright: Edge not found. {str(edge_error)[:150]}'
+                asyncio.create_task(writelog(msg, False))
+                return "", 0, [], edge_ua
 
             # 컨텍스트 생성
             context = await browser.new_context(
                 viewport={'width': 1920, 'height': 1080},
-                user_agent=user_agent if user_agent else 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                user_agent=edge_ua,
                 locale='ko-KR',
                 timezone_id='Asia/Seoul',
                 permissions=[],
@@ -3895,29 +3926,36 @@ async def fetch_with_playwright(url: str, user_agent: str = None, cookies: Dict 
                 }
             )
 
-            # 쿠키 설정
-            if cookies:
-                await context.add_cookies(cookies)
-
-            # 페이지 생성
+            # 페이지 생성 (실제 브라우저처럼 새로운 세션으로 시작)
             page = await context.new_page()
 
-            # WebDriver 속성 제거 및 다양한 봇 감지 우회
+            # WebDriver 속성 제거 및 다양한 봇 감지 우회 (강화된 버전)
             await page.add_init_script("""
-                // WebDriver 속성 제거
+                // WebDriver 속성 완전 제거
                 Object.defineProperty(navigator, 'webdriver', {
-                    get: () => undefined
+                    get: () => false
                 });
 
-                // navigator.webdriver 완전 삭제
-                delete navigator.__proto__.webdriver;
+                delete Object.getPrototypeOf(navigator).webdriver;
 
-                // Chrome 객체 추가
+                // Chrome 객체 추가 (더 완전하게)
                 window.chrome = {
                     runtime: {},
                     loadTimes: function() {},
                     csi: function() {},
-                    app: {}
+                    app: {
+                        isInstalled: false,
+                        InstallState: {
+                            DISABLED: 'disabled',
+                            INSTALLED: 'installed',
+                            NOT_INSTALLED: 'not_installed'
+                        },
+                        RunningState: {
+                            CANNOT_RUN: 'cannot_run',
+                            READY_TO_RUN: 'ready_to_run',
+                            RUNNING: 'running'
+                        }
+                    }
                 };
 
                 // Permissions 덮어쓰기
@@ -3928,13 +3966,36 @@ async def fetch_with_playwright(url: str, user_agent: str = None, cookies: Dict 
                         originalQuery(parameters)
                 );
 
-                // Plugins 설정 (실제와 유사하게)
+                // Plugins 설정 (더 현실적으로)
                 Object.defineProperty(navigator, 'plugins', {
-                    get: () => [
-                        {name: 'Chrome PDF Plugin', description: 'Portable Document Format', filename: 'internal-pdf-viewer'},
-                        {name: 'Chrome PDF Viewer', description: '', filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai'},
-                        {name: 'Native Client', description: '', filename: 'internal-nacl-plugin'}
-                    ]
+                    get: () => {
+                        const plugins = [
+                            {
+                                0: {type: 'application/x-google-chrome-pdf', suffixes: 'pdf', description: 'Portable Document Format'},
+                                description: 'Portable Document Format',
+                                filename: 'internal-pdf-viewer',
+                                length: 1,
+                                name: 'Chrome PDF Plugin'
+                            },
+                            {
+                                0: {type: 'application/pdf', suffixes: 'pdf', description: ''},
+                                description: '',
+                                filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai',
+                                length: 1,
+                                name: 'Chrome PDF Viewer'
+                            },
+                            {
+                                0: {type: 'application/x-nacl', suffixes: '', description: 'Native Client Executable'},
+                                1: {type: 'application/x-pnacl', suffixes: '', description: 'Portable Native Client Executable'},
+                                description: '',
+                                filename: 'internal-nacl-plugin',
+                                length: 2,
+                                name: 'Native Client'
+                            }
+                        ];
+                        plugins.length = 3;
+                        return plugins;
+                    }
                 });
 
                 // Languages 설정
@@ -3968,33 +4029,81 @@ async def fetch_with_playwright(url: str, user_agent: str = None, cookies: Dict 
                         effectiveType: '4g',
                         rtt: 50,
                         downlink: 10,
-                        saveData: false
+                        saveData: false,
+                        onchange: null,
+                        ontypechange: null
                     })
                 });
+
+                // maxTouchPoints 설정
+                Object.defineProperty(navigator, 'maxTouchPoints', {
+                    get: () => 0
+                });
+
+                // Battery API 숨기기
+                if ('getBattery' in navigator) {
+                    navigator.getBattery = undefined;
+                }
+
+                // WebGL Vendor/Renderer 정보 수정
+                const getParameter = WebGLRenderingContext.prototype.getParameter;
+                WebGLRenderingContext.prototype.getParameter = function(parameter) {
+                    if (parameter === 37445) {
+                        return 'Intel Inc.';
+                    }
+                    if (parameter === 37446) {
+                        return 'Intel Iris OpenGL Engine';
+                    }
+                    return getParameter.apply(this, [parameter]);
+                };
+
+                // Canvas fingerprinting 방지
+                const originalToDataURL = HTMLCanvasElement.prototype.toDataURL;
+                HTMLCanvasElement.prototype.toDataURL = function(type) {
+                    if (type === 'image/png' && this.width === 16 && this.height === 16) {
+                        return originalToDataURL.apply(this, arguments);
+                    }
+                    return originalToDataURL.apply(this, arguments);
+                };
+
+                // Notification.permission 설정
+                if ('Notification' in window) {
+                    Notification.permission = 'default';
+                }
             """)
 
-            # 먼저 네이버 메인 페이지 방문 (정상 사용자 행동 모방)
+            # 먼저 네이버 메인 페이지 방문 (정상 사용자 행동 모방, 쿠키 획득)
             try:
-                await page.goto('https://www.naver.com', wait_until='domcontentloaded', timeout=30000)
-                await page.wait_for_timeout(1000)  # 1초 대기
+                await page.goto('https://www.naver.com', wait_until='load', timeout=30000)
+                # 충분한 대기 시간을 주어 JavaScript가 쿠키를 설정하도록 함
+                await page.wait_for_timeout(5000)  # 5초 대기 (쿠키 설정 완료 대기)
 
-                # 마우스 움직임 시뮬레이션 (정상 사용자 행동)
-                await page.mouse.move(100, 100)
-                await page.mouse.move(200, 200)
-                await page.wait_for_timeout(500)
+                # 현실적인 사용자 행동 시뮬레이션
+                try:
+                    # 페이지 스크롤 (사용자처럼 보이기 위해)
+                    await page.evaluate('window.scrollTo(0, 500)')
+                    await page.wait_for_timeout(500)
+                    await page.evaluate('window.scrollTo(0, 1000)')
+                    await page.wait_for_timeout(500)
+                    await page.evaluate('window.scrollTo(0, 0)')
+                    await page.wait_for_timeout(1000)
+                except:
+                    pass  # 스크롤 실패해도 계속 진행
             except Exception as e:
                 # 메인 페이지 로드 실패해도 계속 진행 (단, CancelledError는 재발생)
                 if isinstance(e, asyncio.CancelledError):
                     raise
-                pass
+                asyncio.create_task(writelog(
+                    f'fetch_with_playwright: Naver main page load failed: {str(e)}', False))
 
             # 페이지 로드 (타임아웃 60초) with Referer 헤더
             try:
-                response = await page.goto(url, wait_until='domcontentloaded', timeout=60000, referer='https://www.naver.com/')
+                response = await page.goto(url, wait_until='load', timeout=60000, referer='https://www.naver.com/')
                 status_code = response.status if response else 0
             except Exception as e:
                 # 페이지 로드 실패 (타임아웃, 네트워크 오류 등)
-                asyncio.create_task(writelog(f'fetch_with_playwright: Failed to load {url}: {str(e)}', False))
+                asyncio.create_task(
+                    writelog(f'fetch_with_playwright: Failed to load {url}: {str(e)}', False))
                 status_code = 0
                 html_content = ""
                 browser_cookies = []
@@ -4011,19 +4120,47 @@ async def fetch_with_playwright(url: str, user_agent: str = None, cookies: Dict 
 
             try:
                 if status_code == 200:
-                    # 추가 대기 (동적 콘텐츠 로드)
-                    await page.wait_for_timeout(3000)  # 3초 대기
+                    # 추가 대기 (동적 콘텐츠 및 쿠키 설정 완료 대기)
+                    await page.wait_for_timeout(10000)  # 10초 대기 (매우 긴 대기)
+
+                    # 현실적인 사용자 행동 시뮬레이션 (타겟 페이지에서도)
+                    try:
+                        await page.evaluate('window.scrollTo(0, 300)')
+                        await page.wait_for_timeout(1200)
+                        await page.evaluate('window.scrollTo(0, 600)')
+                        await page.wait_for_timeout(1200)
+                        await page.evaluate('window.scrollTo(0, 900)')
+                        await page.wait_for_timeout(1200)
+
+                        # 상품 이미지 클릭 시도 (실제 상호작용)
+                        try:
+                            await page.click('img', timeout=2000)
+                            await page.wait_for_timeout(500)
+                        except:
+                            pass
+                    except:
+                        pass
 
                     # HTML 콘텐츠 가져오기
                     html_content = await page.content()
+                elif status_code:
+                    # 상태 코드가 있지만 200이 아닌 경우 (403, 429 등)
+                    await page.wait_for_timeout(5000)  # 5초 대기
+                    html_content = await page.content()
                 else:
-                    html_content = await page.content() if status_code else ""
+                    html_content = ""
 
                 # 브라우저에서 쿠키 가져오기 (API 요청에 사용하기 위해)
                 browser_cookies = await context.cookies()
+
+                # 디버깅: 쿠키 개수와 이름 로그
+                cookie_names = [c['name'] for c in browser_cookies]
+                asyncio.create_task(writelog(
+                    f'fetch_with_playwright: Retrieved {len(browser_cookies)} cookies from {url}: {cookie_names}', False))
             except Exception as e:
                 # 브라우저가 크래시되었거나 페이지가 닫힌 경우
-                asyncio.create_task(writelog(f'fetch_with_playwright: Browser error while processing {url}: {str(e)}', False))
+                asyncio.create_task(writelog(
+                    f'fetch_with_playwright: Browser error while processing {url}: {str(e)}', False))
 
             # 브라우저 종료
             try:
@@ -4031,12 +4168,14 @@ async def fetch_with_playwright(url: str, user_agent: str = None, cookies: Dict 
             except:
                 pass  # 브라우저가 이미 닫혔을 수 있음
 
-            return html_content, status_code, browser_cookies
+            return html_content, status_code, browser_cookies, edge_ua
 
     except Exception as e:
         msg = f'fetch_with_playwright error: {str(e)}\n{traceback.format_exc()}'
         asyncio.create_task(writelog(msg, False))
-        return "", 0, []
+        # 실패 시에도 Edge UA 반환
+        edge_ua = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0'
+        return "", 0, [], edge_ua
 
 
 async def get_store_answer(store_url, cnt, interval, pattern):
@@ -4065,19 +4204,19 @@ async def get_store_answer(store_url, cnt, interval, pattern):
         with tqdm(total=100, desc=primary_key, leave=False, dynamic_ncols=True) as progress_bar:
             while try_count < 3:
                 try:
-                    # BrowserLikeClient의 기존 쿠키를 Playwright 형식으로 가져오기
-                    existing_cookies = client.get_playwright_cookies(store_url)
+                    # Playwright를 사용하여 페이지 가져오기
+                    # 실제 사용자처럼 행동하여 자연스럽게 쿠키를 획득
+                    html, status_code, browser_cookies, playwright_ua = await fetch_with_playwright(store_url)
 
-                    # Playwright를 사용하여 페이지 가져오기 (봇 감지 우회, 기존 쿠키 전달)
-                    html, status_code, browser_cookies = await fetch_with_playwright(
-                        store_url,
-                        user_agent=dataInfo.User_Agent,
-                        cookies=existing_cookies
-                    )
+                    # Playwright에서 사용한 User-Agent를 httpx 클라이언트에도 적용 (브라우저-UA 일치)
+                    client.update_user_agent(playwright_ua)
+                    asyncio.create_task(
+                        writelog(f'Updated client User-Agent to match Playwright: {playwright_ua}', False))
 
                     # Playwright에서 얻은 쿠키를 httpx 클라이언트에 적용 (API 요청 시 사용)
                     if browser_cookies:
-                        client.cookie_manager.set_cookies_from_playwright(browser_cookies, store_url)
+                        client.cookie_manager.set_cookies_from_playwright(
+                            browser_cookies, store_url)
                         asyncio.create_task(
                             writelog(f'Applied {len(browser_cookies)} cookies from Playwright to httpx client for {store_url}', False))
 
