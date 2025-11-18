@@ -3844,14 +3844,16 @@ def extract_key_values_from_script(html_content):
     return results
 
 
-async def fetch_with_playwright(url: str, user_agent: str = None, cookies: Dict = None) -> Tuple[str, int, List[Dict]]:
+async def fetch_with_playwright(url: str, user_agent: str = None) -> Tuple[str, int, List[Dict]]:
     """
     Playwright를 사용하여 URL을 가져옵니다. 네이버의 봇 감지를 우회하기 위한 다양한 기법을 사용합니다.
+
+    실제 브라우저처럼 새로운 세션으로 시작하여 자연스러운 쿠키를 생성합니다.
+    생성된 쿠키는 반환되며, 이후 httpx 클라이언트에서 사용할 수 있습니다.
 
     Args:
         url: 가져올 URL
         user_agent: 사용할 User-Agent (None이면 기본값 사용)
-        cookies: 설정할 쿠키들
 
     Returns:
         Tuple[str, int, List[Dict]]: (HTML 콘텐츠, HTTP 상태 코드, 브라우저 쿠키 리스트)
@@ -3895,11 +3897,7 @@ async def fetch_with_playwright(url: str, user_agent: str = None, cookies: Dict 
                 }
             )
 
-            # 쿠키 설정
-            if cookies:
-                await context.add_cookies(cookies)
-
-            # 페이지 생성
+            # 페이지 생성 (실제 브라우저처럼 새로운 세션으로 시작)
             page = await context.new_page()
 
             # WebDriver 속성 제거 및 다양한 봇 감지 우회
@@ -4065,14 +4063,12 @@ async def get_store_answer(store_url, cnt, interval, pattern):
         with tqdm(total=100, desc=primary_key, leave=False, dynamic_ncols=True) as progress_bar:
             while try_count < 3:
                 try:
-                    # BrowserLikeClient의 기존 쿠키를 Playwright 형식으로 가져오기
-                    existing_cookies = client.get_playwright_cookies(store_url)
-
-                    # Playwright를 사용하여 페이지 가져오기 (봇 감지 우회, 기존 쿠키 전달)
+                    # Playwright를 사용하여 페이지 가져오기 (봇 감지 우회)
+                    # 주의: 기존 쿠키를 전달하지 않음 - 실제 브라우저처럼 새로운 세션으로 시작
+                    # Playwright가 생성한 쿠키를 httpx 클라이언트에 전달하여 사용
                     html, status_code, browser_cookies = await fetch_with_playwright(
                         store_url,
-                        user_agent=dataInfo.User_Agent,
-                        cookies=existing_cookies
+                        user_agent=dataInfo.User_Agent
                     )
 
                     # Playwright에서 얻은 쿠키를 httpx 클라이언트에 적용 (API 요청 시 사용)
