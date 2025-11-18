@@ -3877,29 +3877,40 @@ async def fetch_with_playwright(url: str, user_agent: str = None) -> Tuple[str, 
     """
     try:
         async with async_playwright() as p:
-            # 실제 Chrome 바이너리 사용 (더 탐지하기 어려움)
+            # 실제 Chrome/Edge 바이너리 사용 (Chromium은 봇 탐지됨)
+            browser = None
+
+            launch_args = [
+                '--disable-blink-features=AutomationControlled',
+                '--no-sandbox',
+                '--disable-setuid-sandbox',
+                '--disable-dev-shm-usage',
+            ]
+
+            # 1. Edge 시도 (Windows 기본 설치)
             try:
                 browser = await p.chromium.launch(
-                    channel='msedge',  # 실제 Chrome 사용
+                    channel='msedge',
                     headless=True,
-                    args=[
-                        '--disable-blink-features=AutomationControlled',
-                        '--no-sandbox',
-                        '--disable-setuid-sandbox',
-                        '--disable-dev-shm-usage',
-                    ]
+                    args=launch_args
                 )
-            except:
-                # Chrome이 없으면 Chromium 사용
-                browser = await p.chromium.launch(
-                    headless=True,
-                    args=[
-                        '--disable-blink-features=AutomationControlled',
-                        '--no-sandbox',
-                        '--disable-setuid-sandbox',
-                        '--disable-dev-shm-usage',
-                    ]
-                )
+                asyncio.create_task(writelog(f'fetch_with_playwright: Using Edge (channel=msedge)', False))
+            except Exception as edge_error:
+                asyncio.create_task(writelog(f'fetch_with_playwright: channel=msedge failed: {str(edge_error)[:100]}', False))
+
+                # 2. Chrome 시도
+                try:
+                    browser = await p.chromium.launch(
+                        channel='chrome',
+                        headless=True,
+                        args=launch_args
+                    )
+                    asyncio.create_task(writelog(f'fetch_with_playwright: Using Chrome (channel=chrome)', False))
+                except Exception as chrome_error:
+                    # Chrome/Edge 모두 실패 - Chromium은 봇 탐지되므로 사용하지 않음
+                    msg = f'fetch_with_playwright: No Chrome/Edge found. Chromium은 봇 탐지되므로 사용 안함.\nEdge error: {str(edge_error)[:100]}\nChrome error: {str(chrome_error)[:100]}'
+                    asyncio.create_task(writelog(msg, False))
+                    return "", 0, []
 
             # 컨텍스트 생성
             context = await browser.new_context(

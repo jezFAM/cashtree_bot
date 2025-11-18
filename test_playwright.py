@@ -24,18 +24,8 @@ async def fetch_with_playwright(url: str, user_agent: str = None) -> Tuple[str, 
     try:
         async with async_playwright() as p:
             print(f"🚀 브라우저 시작 중...")
-            # 실제 Chrome/Edge 바이너리 사용 (더 탐지하기 어려움)
+            # 실제 Chrome/Edge 바이너리 사용 (Chromium은 봇 탐지됨)
             browser = None
-            browser_paths = [
-                r"C:\Program Files\Google\Chrome\Application\chrome.exe",
-                r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
-                r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
-                r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
-                "/usr/bin/google-chrome",
-                "/usr/bin/chromium-browser",
-                "/usr/bin/chromium",
-                "/usr/bin/microsoft-edge",
-            ]
 
             launch_args = [
                 '--disable-blink-features=AutomationControlled',
@@ -44,53 +34,33 @@ async def fetch_with_playwright(url: str, user_agent: str = None) -> Tuple[str, 
                 '--disable-dev-shm-usage',
             ]
 
-            # 1. Chrome channel 시도
+            # 1. Edge 시도 (Windows 기본 설치)
             try:
-                print(f"  → Chrome 사용 시도 (channel='chrome')...")
+                print(f"  → Edge 사용 시도 (channel='msedge')...")
                 browser = await p.chromium.launch(
-                    channel='chrome',
+                    channel='msedge',
                     headless=True,
                     args=launch_args
                 )
-                print(f"  ✅ Chrome 사용 성공 (channel='chrome')")
-            except Exception as chrome_error:
-                print(f"  ⚠️  channel='chrome' 실패: {str(chrome_error)[:100]}")
+                print(f"  ✅ Edge 사용 성공 (channel='msedge')")
+            except Exception as edge_error:
+                print(f"  ⚠️  channel='msedge' 실패: {str(edge_error)[:100]}")
 
-                # 2. Edge channel 시도
+                # 2. Chrome 시도
                 try:
-                    print(f"  → Edge 사용 시도 (channel='msedge')...")
+                    print(f"  → Chrome 사용 시도 (channel='chrome')...")
                     browser = await p.chromium.launch(
-                        channel='msedge',
+                        channel='chrome',
                         headless=True,
                         args=launch_args
                     )
-                    print(f"  ✅ Edge 사용 성공 (channel='msedge')")
-                except Exception as edge_error:
-                    print(f"  ⚠️  channel='msedge' 실패: {str(edge_error)[:100]}")
-                    print(f"  → 시스템 브라우저 경로 검색 중...")
-
-                    # 3. 직접 경로로 시도
-                    for browser_path in browser_paths:
-                        if os.path.exists(browser_path):
-                            try:
-                                print(f"  → 브라우저 경로 시도: {browser_path}")
-                                browser = await p.chromium.launch(
-                                    executable_path=browser_path,
-                                    headless=True,
-                                    args=launch_args
-                                )
-                                print(f"  ✅ 브라우저 사용 성공: {browser_path}")
-                                break
-                            except Exception as path_error:
-                                print(f"  ⚠️  경로 실패: {str(path_error)[:100]}")
-                                continue
-
-                    # 모든 시도 실패
-                    if browser is None:
-                        raise Exception(
-                            f"Chrome 또는 Edge 브라우저를 찾을 수 없습니다. "
-                            f"시스템에 Chrome 또는 Edge를 설치하거나 PLAYWRIGHT_BROWSERS_PATH 환경변수를 설정하세요."
-                        )
+                    print(f"  ✅ Chrome 사용 성공 (channel='chrome')")
+                except Exception as chrome_error:
+                    # Chrome/Edge 모두 실패 - Chromium은 봇 탐지되므로 사용하지 않음
+                    print(f"  ❌ No Chrome/Edge found. Chromium은 봇 탐지되므로 사용 안함.")
+                    print(f"     Edge error: {str(edge_error)[:100]}")
+                    print(f"     Chrome error: {str(chrome_error)[:100]}")
+                    return "", 0, []
 
             # 컨텍스트 생성
             context = await browser.new_context(
