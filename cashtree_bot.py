@@ -1,4 +1,5 @@
 import os
+import sys
 import io
 import traceback
 import ctypes
@@ -19,6 +20,11 @@ import ssl
 import time
 import uuid
 import urllib
+
+# ★★★★★ PyInstaller 단일 파일 실행 시 시스템 Chrome 사용 설정 ★★★★★
+if getattr(sys, 'frozen', False):
+    # Playwright가 번들 브라우저 찾는 걸 완전히 차단 → 시스템 Chrome만 사용
+    os.environ["PLAYWRIGHT_BROWSERS_PATH"] = "0"
 
 from asyncio import Lock
 from collections import defaultdict
