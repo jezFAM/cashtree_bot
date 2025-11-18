@@ -3844,17 +3844,16 @@ def extract_key_values_from_script(html_content):
     return results
 
 
-async def fetch_with_playwright(url: str, user_agent: str = None, cookies: Dict = None) -> Tuple[str, int, List[Dict]]:
+async def fetch_with_playwright(url: str, cookies: Dict = None) -> Tuple[str, int, List[Dict], str]:
     """
     Playwright를 사용하여 URL을 가져옵니다. 네이버의 봇 감지를 우회하기 위한 다양한 기법을 사용합니다.
 
     Args:
         url: 가져올 URL
-        user_agent: 사용할 User-Agent (None이면 기본값 사용)
         cookies: 설정할 쿠키들
 
     Returns:
-        Tuple[str, int, List[Dict]]: (HTML 콘텐츠, HTTP 상태 코드, 브라우저 쿠키 리스트)
+        Tuple[str, int, List[Dict], str]: (HTML 콘텐츠, HTTP 상태 코드, 브라우저 쿠키 리스트, 실제 사용된 User-Agent)
     """
     try:
         async with async_playwright() as p:
@@ -3872,10 +3871,9 @@ async def fetch_with_playwright(url: str, user_agent: str = None, cookies: Dict 
                 ]
             )
 
-            # 컨텍스트 생성
+            # 컨텍스트 생성 (user_agent는 브라우저 기본값 사용)
             context = await browser.new_context(
                 viewport={'width': 1920, 'height': 1080},
-                user_agent=user_agent if user_agent else 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                 locale='ko-KR',
                 timezone_id='Asia/Seoul',
                 permissions=[],
@@ -3973,6 +3971,9 @@ async def fetch_with_playwright(url: str, user_agent: str = None, cookies: Dict 
                 });
             """)
 
+            # 브라우저가 실제로 사용하는 User-Agent 가져오기
+            actual_user_agent = await page.evaluate('navigator.userAgent')
+
             # 먼저 네이버 메인 페이지 방문 (정상 사용자 행동 모방)
             try:
                 await page.goto('https://www.naver.com', wait_until='domcontentloaded', timeout=30000)
@@ -4004,7 +4005,7 @@ async def fetch_with_playwright(url: str, user_agent: str = None, cookies: Dict 
                 except:
                     pass  # 브라우저가 이미 닫혔을 수 있음
 
-                return html_content, status_code, browser_cookies
+                return html_content, status_code, browser_cookies, actual_user_agent
 
             html_content = ""
             browser_cookies = []
@@ -4031,12 +4032,12 @@ async def fetch_with_playwright(url: str, user_agent: str = None, cookies: Dict 
             except:
                 pass  # 브라우저가 이미 닫혔을 수 있음
 
-            return html_content, status_code, browser_cookies
+            return html_content, status_code, browser_cookies, actual_user_agent
 
     except Exception as e:
         msg = f'fetch_with_playwright error: {str(e)}\n{traceback.format_exc()}'
         asyncio.create_task(writelog(msg, False))
-        return "", 0, []
+        return "", 0, [], ""
 
 
 async def get_store_answer(store_url, cnt, interval, pattern):
@@ -4069,9 +4070,8 @@ async def get_store_answer(store_url, cnt, interval, pattern):
                     existing_cookies = client.get_playwright_cookies(store_url)
 
                     # Playwright를 사용하여 페이지 가져오기 (봇 감지 우회, 기존 쿠키 전달)
-                    html, status_code, browser_cookies = await fetch_with_playwright(
+                    html, status_code, browser_cookies, actual_user_agent = await fetch_with_playwright(
                         store_url,
-                        user_agent=dataInfo.User_Agent,
                         cookies=existing_cookies
                     )
 
@@ -4080,6 +4080,12 @@ async def get_store_answer(store_url, cnt, interval, pattern):
                         client.cookie_manager.set_cookies_from_playwright(browser_cookies, store_url)
                         asyncio.create_task(
                             writelog(f'Applied {len(browser_cookies)} cookies from Playwright to httpx client for {store_url}', False))
+
+                    # Playwright가 실제로 사용한 User-Agent를 BrowserLikeClient에 적용
+                    if actual_user_agent:
+                        client.user_agent = actual_user_agent
+                        asyncio.create_task(
+                            writelog(f'Updated User-Agent to match browser: {actual_user_agent[:50]}...', False))
 
                     if status_code == 429:
                         # 429 Too Many Requests

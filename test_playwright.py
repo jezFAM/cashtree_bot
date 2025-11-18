@@ -10,16 +10,15 @@ from playwright.async_api import async_playwright
 from playwright_stealth import Stealth
 
 
-async def fetch_with_playwright(url: str, user_agent: str = None) -> Tuple[str, int, list]:
+async def fetch_with_playwright(url: str) -> Tuple[str, int, list, str]:
     """
     Playwright를 사용하여 URL을 가져옵니다. 네이버의 봇 감지를 우회하기 위한 다양한 기법을 사용합니다.
 
     Args:
         url: 가져올 URL
-        user_agent: 사용할 User-Agent (None이면 기본값 사용)
 
     Returns:
-        Tuple[str, int, list]: (HTML 콘텐츠, HTTP 상태 코드, 브라우저 쿠키)
+        Tuple[str, int, list, str]: (HTML 콘텐츠, HTTP 상태 코드, 브라우저 쿠키, 실제 사용된 User-Agent)
     """
     try:
         async with async_playwright() as p:
@@ -38,10 +37,9 @@ async def fetch_with_playwright(url: str, user_agent: str = None) -> Tuple[str, 
                 ]
             )
 
-            # 컨텍스트 생성
+            # 컨텍스트 생성 (user_agent는 브라우저 기본값 사용)
             context = await browser.new_context(
                 viewport={'width': 1920, 'height': 1080},
-                user_agent=user_agent if user_agent else 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
                 locale='ko-KR',
                 timezone_id='Asia/Seoul',
                 permissions=[],
@@ -137,6 +135,10 @@ async def fetch_with_playwright(url: str, user_agent: str = None) -> Tuple[str, 
                 });
             """)
 
+            # 브라우저가 실제로 사용하는 User-Agent 가져오기
+            actual_user_agent = await page.evaluate('navigator.userAgent')
+            print(f"🔍 User-Agent: {actual_user_agent}")
+
             # 먼저 네이버 메인 페이지 방문 (정상 사용자 행동 모방)
             print(f"🏠 네이버 메인 페이지 방문 중...")
             try:
@@ -170,7 +172,7 @@ async def fetch_with_playwright(url: str, user_agent: str = None) -> Tuple[str, 
                 except:
                     pass  # 브라우저가 이미 닫혔을 수 있음
 
-                return html_content, status_code, browser_cookies
+                return html_content, status_code, browser_cookies, actual_user_agent
 
             print(f"📊 HTTP 상태 코드: {status_code}")
 
@@ -200,12 +202,12 @@ async def fetch_with_playwright(url: str, user_agent: str = None) -> Tuple[str, 
             except:
                 pass  # 브라우저가 이미 닫혔을 수 있음
 
-            return html_content, status_code, browser_cookies
+            return html_content, status_code, browser_cookies, actual_user_agent
 
     except Exception as e:
         print(f"❌ 오류 발생: {str(e)}")
         print(traceback.format_exc())
-        return "", 0, []
+        return "", 0, [], ""
 
 
 async def main():
@@ -219,11 +221,12 @@ async def main():
     print("-" * 80)
 
     # 페이지 가져오기
-    html, status_code, cookies = await fetch_with_playwright(test_url)
+    html, status_code, cookies, user_agent = await fetch_with_playwright(test_url)
 
     print("-" * 80)
     print("결과:")
     print(f"  상태 코드: {status_code}")
+    print(f"  User-Agent: {user_agent}")
     print(f"  쿠키 개수: {len(cookies)}")
 
     if cookies:
