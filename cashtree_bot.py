@@ -3887,7 +3887,7 @@ async def fetch_with_playwright(url: str, user_agent: str = None) -> Tuple[str, 
                 '--disable-dev-shm-usage',
             ]
 
-            # 1. Edge 시도 (Windows 기본 설치)
+            # Edge만 사용 (Windows 기본 설치)
             try:
                 browser = await p.chromium.launch(
                     channel='msedge',
@@ -3896,26 +3896,15 @@ async def fetch_with_playwright(url: str, user_agent: str = None) -> Tuple[str, 
                 )
                 asyncio.create_task(writelog(f'fetch_with_playwright: Using Edge (channel=msedge)', False))
             except Exception as edge_error:
-                asyncio.create_task(writelog(f'fetch_with_playwright: channel=msedge failed: {str(edge_error)[:100]}', False))
-
-                # 2. Chrome 시도
-                try:
-                    browser = await p.chromium.launch(
-                        channel='chrome',
-                        headless=True,
-                        args=launch_args
-                    )
-                    asyncio.create_task(writelog(f'fetch_with_playwright: Using Chrome (channel=chrome)', False))
-                except Exception as chrome_error:
-                    # Chrome/Edge 모두 실패 - Chromium은 봇 탐지되므로 사용하지 않음
-                    msg = f'fetch_with_playwright: No Chrome/Edge found. Chromium은 봇 탐지되므로 사용 안함.\nEdge error: {str(edge_error)[:100]}\nChrome error: {str(chrome_error)[:100]}'
-                    asyncio.create_task(writelog(msg, False))
-                    return "", 0, []
+                # Edge 없으면 조용히 실패 (Chromium은 봇 탐지되므로 사용 안함)
+                msg = f'fetch_with_playwright: Edge not found. {str(edge_error)[:150]}'
+                asyncio.create_task(writelog(msg, False))
+                return "", 0, []
 
             # 컨텍스트 생성
             context = await browser.new_context(
                 viewport={'width': 1920, 'height': 1080},
-                user_agent=user_agent if user_agent else 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                user_agent=user_agent if user_agent else 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36 Edg/131.0.0.0',
                 locale='ko-KR',
                 timezone_id='Asia/Seoul',
                 permissions=[],
