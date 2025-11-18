@@ -7,7 +7,6 @@ import asyncio
 import traceback
 from typing import Dict, Tuple
 from playwright.async_api import async_playwright
-from playwright_stealth import Stealth
 
 
 async def fetch_with_playwright(url: str, user_agent: str = None) -> Tuple[str, int, list]:
