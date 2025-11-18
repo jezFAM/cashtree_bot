@@ -1366,11 +1366,7 @@ class BrowserLikeClient:
         Args:
             new_agent (str): 새로운 User Agent 문자열
         """
-        old_agent = self.user_agent[:10] + \
-            "..." if self.user_agent else "None"
         self.user_agent = new_agent
-        new_agent_display = new_agent[:10] + "..." if new_agent else "None"
-        print(f"Store token updated: {old_agent} → {new_agent_display}")
 
     def update_store_token(self, new_token):
         """
@@ -1379,11 +1375,7 @@ class BrowserLikeClient:
         Args:
             new_token (str): 새로운 스토어 토큰
         """
-        old_token = self.store_token[:10] + \
-            "..." if self.store_token else "None"
         self.store_token = new_token
-        new_token_display = new_token[:10] + "..." if new_token else "None"
-        print(f"Store token updated: {old_token} → {new_token_display}")
 
     async def get(self, url, **kwargs):
         """GET 요청 수행"""
@@ -4151,7 +4143,30 @@ async def fetch_with_playwright(url: str) -> Tuple[str, int, List[Dict], str]:
                     html_content = ""
 
                 # 브라우저에서 쿠키 가져오기 (API 요청에 사용하기 위해)
-                browser_cookies = await context.cookies()
+                # 여러 도메인의 쿠키를 모두 가져오기 (네이버는 여러 도메인에 쿠키 설정)
+                all_cookies = []
+                cookie_urls = [
+                    'https://www.naver.com',
+                    'https://naver.com',
+                    'https://brand.naver.com',
+                    url  # 현재 URL
+                ]
+
+                # 각 URL의 쿠키를 가져와서 중복 제거하며 병합
+                seen_cookies = set()
+                for cookie_url in cookie_urls:
+                    try:
+                        cookies = await context.cookies(cookie_url)
+                        for cookie in cookies:
+                            # 쿠키를 (name, domain, path)로 식별하여 중복 제거
+                            cookie_id = (cookie.get('name'), cookie.get('domain'), cookie.get('path'))
+                            if cookie_id not in seen_cookies:
+                                seen_cookies.add(cookie_id)
+                                all_cookies.append(cookie)
+                    except:
+                        pass  # 일부 URL에서 쿠키 가져오기 실패해도 계속 진행
+
+                browser_cookies = all_cookies
 
                 # 디버깅: 쿠키 개수와 이름 로그
                 cookie_names = [c['name'] for c in browser_cookies]
