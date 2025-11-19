@@ -1157,17 +1157,28 @@ class CookieManager:
 
 
 class BrowserLikeClient:
-    """실제 브라우저와 유사하게 동작하는 HTTP 클라이언트"""
+    """실제 브라우저와 유사하게 동작하는 HTTP 클라이언트
+
+    쿠키 처리 전략:
+    1. use_playwright_cookies=True: Playwright에서 가져온 쿠키만 사용
+       - CookieManager에 설정된 쿠키만 사용
+       - ini 설정 쿠키(store_nnb, store_fwb, store_buc)는 무시
+       - 사용 예: get_store_answer, get_place_answer(Playwright 성공 시)
+
+    2. use_playwright_cookies=False: ini 설정 쿠키 사용
+       - ini 쿠키 + CookieManager 쿠키 병합
+       - 사용 예: get_place_answer(Playwright 실패 시)
+    """
 
     def __init__(self, user_agent, store_token, store_nnb: Optional[str] = None, store_fwb: Optional[str] = None, store_buc: Optional[str] = None, use_playwright_cookies: bool = False, proxy_config: Optional[Union[str, ProxyInfo]] = None, **kwargs):
         """
         Args:
             user_agent: 사용할 User-Agent 문자열
             store_token: 네이버 스토어 보안 토큰
-            store_nnb: 네이버 NNB 쿠키 (선택 사항, Playwright 없이 요청 시 필요)
-            store_fwb: 네이버 FWB 쿠키 (선택 사항, Playwright 없이 요청 시 필요)
-            store_buc: 네이버 BUC 쿠키 (선택 사항, Playwright 없이 요청 시 필요)
-            use_playwright_cookies: Playwright에서 가져온 쿠키를 사용하는지 여부 (ini 쿠키 중복 방지)
+            store_nnb: 네이버 NNB 쿠키 (use_playwright_cookies=False일 때 사용)
+            store_fwb: 네이버 FWB 쿠키 (use_playwright_cookies=False일 때 사용)
+            store_buc: 네이버 BUC 쿠키 (use_playwright_cookies=False일 때 사용)
+            use_playwright_cookies: True면 Playwright 쿠키만 사용, False면 ini 쿠키 사용
             proxy_config: 프록시 설정 (선택 사항)
         """
         self.cookie_manager = CookieManager()
@@ -1326,31 +1337,34 @@ class BrowserLikeClient:
 
         # 3. 도메인 조건 및 쿠키 상태에 따라 Cookie 헤더 설정
         if is_naver_domain:
-            # 네이버 관련 도메인일 경우: 초기 쿠키 주입 로직 적용
-            initial_cookie = None
-
+            # 네이버 관련 도메인일 경우
             if self.use_playwright_cookies:
-                # Playwright 쿠키 사용 시: store_token만 추가 (ini 쿠키 중복 방지)
-                if self.store_token:
-                    initial_cookie = f'X-Wtm-Cpt-Tk={self.store_token}; ba.uuid=0'
+                # Playwright 쿠키만 사용: CookieManager의 쿠키만 사용하고 ini 쿠키는 추가하지 않음
+                # Playwright가 이미 모든 필요한 쿠키를 가져왔으므로 initial_cookie 불필요
+                if cookie_header_from_manager:
+                    headers['Cookie'] = cookie_header_from_manager
             else:
-                # ini 설정 쿠키 사용 시: 전체 쿠키 추가
+                # ini 설정 쿠키 사용: initial_cookie + CookieManager 쿠키 병합
+                initial_cookie = None
+
+                # store_* 값이 모두 있는 경우 전체 초기 쿠키 생성
                 if self.store_nnb and self.store_fwb and self.store_buc and self.store_token:
                     initial_cookie = f'NNB={self.store_nnb}; BUC={self.store_buc}; _fwb={self.store_fwb}; X-Wtm-Cpt-Tk={self.store_token}; ba.uuid=0'
+                # store_token만 있는 경우
                 elif self.store_token:
                     initial_cookie = f'X-Wtm-Cpt-Tk={self.store_token}; ba.uuid=0'
 
-            if cookie_header_from_manager:
-                # CookieManager 쿠키가 있는 경우
-                if initial_cookie and 'ba.uuid' not in cookie_header_from_manager:
-                    # 초기 쿠키가 있고 ba.uuid가 없으면 앞에 추가
-                    headers['Cookie'] = f"{initial_cookie}; {cookie_header_from_manager}"
-                else:
-                    # CookieManager 쿠키 우선 사용
-                    headers['Cookie'] = cookie_header_from_manager
-            elif initial_cookie:
-                # CookieManager 쿠키가 없고 초기 쿠키가 있으면 초기 쿠키만 설정
-                headers['Cookie'] = initial_cookie
+                if cookie_header_from_manager:
+                    # CookieManager 쿠키가 있는 경우
+                    if initial_cookie and 'ba.uuid' not in cookie_header_from_manager:
+                        # 초기 쿠키가 있고 ba.uuid가 없으면 앞에 추가
+                        headers['Cookie'] = f"{initial_cookie}; {cookie_header_from_manager}"
+                    else:
+                        # CookieManager 쿠키 우선 사용
+                        headers['Cookie'] = cookie_header_from_manager
+                elif initial_cookie:
+                    # CookieManager 쿠키가 없고 초기 쿠키가 있으면 초기 쿠키만 설정
+                    headers['Cookie'] = initial_cookie
         else:
             # 네이버 관련 도메인이 아닐 경우: CookieManager의 쿠키만 사용
             if cookie_header_from_manager:
@@ -4393,10 +4407,11 @@ async def get_store_answer(store_url, cnt, interval, pattern):
 
         return list(dict.fromkeys(answer_list)), isSuccess
 
-    # BrowserLikeClient 생성 (Playwright가 쿠키를 제공하므로 store_token만 필요)
+    # BrowserLikeClient 생성 (Playwright가 쿠키를 제공하므로 use_playwright_cookies=True)
     client = BrowserLikeClient(
         user_agent=dataInfo.User_Agent,
         store_token=dataInfo.store_token,
+        use_playwright_cookies=True,  # Playwright 쿠키만 사용, ini 쿠키 무시
         proxy_config=proxyInfo.url)
 
     # refresh 버퍼에 추가
