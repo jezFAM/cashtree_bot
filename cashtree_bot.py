@@ -1159,7 +1159,7 @@ class CookieManager:
 class BrowserLikeClient:
     """실제 브라우저와 유사하게 동작하는 HTTP 클라이언트"""
 
-    def __init__(self, user_agent, store_token, store_nnb: Optional[str] = None, store_fwb: Optional[str] = None, store_buc: Optional[str] = None, proxy_config: Optional[Union[str, ProxyInfo]] = None, **kwargs):
+    def __init__(self, user_agent, store_token, store_nnb: Optional[str] = None, store_fwb: Optional[str] = None, store_buc: Optional[str] = None, use_playwright_cookies: bool = False, proxy_config: Optional[Union[str, ProxyInfo]] = None, **kwargs):
         """
         Args:
             user_agent: 사용할 User-Agent 문자열
@@ -1167,6 +1167,7 @@ class BrowserLikeClient:
             store_nnb: 네이버 NNB 쿠키 (선택 사항, Playwright 없이 요청 시 필요)
             store_fwb: 네이버 FWB 쿠키 (선택 사항, Playwright 없이 요청 시 필요)
             store_buc: 네이버 BUC 쿠키 (선택 사항, Playwright 없이 요청 시 필요)
+            use_playwright_cookies: Playwright에서 가져온 쿠키를 사용하는지 여부 (ini 쿠키 중복 방지)
             proxy_config: 프록시 설정 (선택 사항)
         """
         self.cookie_manager = CookieManager()
@@ -1176,6 +1177,7 @@ class BrowserLikeClient:
         self.store_fwb = store_fwb
         self.store_buc = store_buc
         self.store_token = store_token
+        self.use_playwright_cookies = use_playwright_cookies
         self.client_kwargs = kwargs
         self.client = None
         self._validate_and_detect_proxy_type()
@@ -1327,12 +1329,16 @@ class BrowserLikeClient:
             # 네이버 관련 도메인일 경우: 초기 쿠키 주입 로직 적용
             initial_cookie = None
 
-            # store_* 값이 모두 있는 경우 전체 초기 쿠키 생성
-            if self.store_nnb and self.store_fwb and self.store_buc and self.store_token:
-                initial_cookie = f'NNB={self.store_nnb}; BUC={self.store_buc}; _fwb={self.store_fwb}; X-Wtm-Cpt-Tk={self.store_token}; ba.uuid=0'
-            # store_token만 있는 경우 (Playwright 쿠키 사용 시)
-            elif self.store_token:
-                initial_cookie = f'X-Wtm-Cpt-Tk={self.store_token}; ba.uuid=0'
+            if self.use_playwright_cookies:
+                # Playwright 쿠키 사용 시: store_token만 추가 (ini 쿠키 중복 방지)
+                if self.store_token:
+                    initial_cookie = f'X-Wtm-Cpt-Tk={self.store_token}; ba.uuid=0'
+            else:
+                # ini 설정 쿠키 사용 시: 전체 쿠키 추가
+                if self.store_nnb and self.store_fwb and self.store_buc and self.store_token:
+                    initial_cookie = f'NNB={self.store_nnb}; BUC={self.store_buc}; _fwb={self.store_fwb}; X-Wtm-Cpt-Tk={self.store_token}; ba.uuid=0'
+                elif self.store_token:
+                    initial_cookie = f'X-Wtm-Cpt-Tk={self.store_token}; ba.uuid=0'
 
             if cookie_header_from_manager:
                 # CookieManager 쿠키가 있는 경우
@@ -2968,29 +2974,24 @@ async def get_place_answer(place_url, cnt, interval, pattern):
     use_playwright_cookies = len(browser_cookies) >= 2
 
     if use_playwright_cookies:
-        # Playwright 쿠키와 user_agent 사용 (ini 쿠키는 사용 안 함)
+        # Playwright 쿠키와 user_agent 사용
         selected_user_agent = playwright_user_agent
-        selected_nnb = None
-        selected_fwb = None
-        selected_buc = None
         asyncio.create_task(writelog(
             f'get_place_answer: Using Playwright user_agent and {len(browser_cookies)} cookies', False))
     else:
         # ini 설정 사용
         selected_user_agent = dataInfo.User_Agent
-        selected_nnb = dataInfo.store_nnb
-        selected_fwb = dataInfo.store_fwb
-        selected_buc = dataInfo.store_buc
         asyncio.create_task(writelog(
             f'get_place_answer: Using ini config user_agent (Playwright cookies: {len(browser_cookies)})', False))
 
-    # BrowserLikeClient 생성
+    # BrowserLikeClient 생성 (use_playwright_cookies 플래그로 쿠키 중복 방지)
     client = BrowserLikeClient(
         user_agent=selected_user_agent,
         store_token=dataInfo.store_token,
-        store_nnb=selected_nnb,
-        store_fwb=selected_fwb,
-        store_buc=selected_buc,
+        store_nnb=dataInfo.store_nnb,
+        store_fwb=dataInfo.store_fwb,
+        store_buc=dataInfo.store_buc,
+        use_playwright_cookies=use_playwright_cookies,
         proxy_config=proxyInfo.url)
 
     # Playwright에서 가져온 쿠키를 BrowserLikeClient에 설정 (2개 이상일 때만)
@@ -3787,29 +3788,24 @@ async def get_kakao_place_answer(place_url, cnt, interval, pattern):
     use_playwright_cookies = len(browser_cookies) >= 2
 
     if use_playwright_cookies:
-        # Playwright 쿠키와 user_agent 사용 (ini 쿠키는 사용 안 함)
+        # Playwright 쿠키와 user_agent 사용
         selected_user_agent = playwright_user_agent
-        selected_nnb = None
-        selected_fwb = None
-        selected_buc = None
         asyncio.create_task(writelog(
             f'get_kakao_place_answer: Using Playwright user_agent and {len(browser_cookies)} cookies', False))
     else:
         # ini 설정 사용
         selected_user_agent = dataInfo.User_Agent
-        selected_nnb = dataInfo.store_nnb
-        selected_fwb = dataInfo.store_fwb
-        selected_buc = dataInfo.store_buc
         asyncio.create_task(writelog(
             f'get_kakao_place_answer: Using ini config user_agent (Playwright cookies: {len(browser_cookies)})', False))
 
-    # BrowserLikeClient 생성
+    # BrowserLikeClient 생성 (use_playwright_cookies 플래그로 쿠키 중복 방지)
     client = BrowserLikeClient(
         user_agent=selected_user_agent,
         store_token=dataInfo.store_token,
-        store_nnb=selected_nnb,
-        store_fwb=selected_fwb,
-        store_buc=selected_buc,
+        store_nnb=dataInfo.store_nnb,
+        store_fwb=dataInfo.store_fwb,
+        store_buc=dataInfo.store_buc,
+        use_playwright_cookies=use_playwright_cookies,
         proxy_config=proxyInfo.url)
 
     # Playwright에서 가져온 쿠키를 BrowserLikeClient에 설정 (2개 이상일 때만)
