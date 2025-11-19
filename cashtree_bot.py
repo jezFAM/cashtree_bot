@@ -2962,22 +2962,34 @@ async def get_place_answer(place_url, cnt, interval, pattern):
 
     # fetch_with_playwright를 사용하여 쿠키 가져오기
     asyncio.create_task(writelog(f'get_place_answer: Fetching cookies with Playwright for {place_url}', False))
-    html_content, status_code, browser_cookies, user_agent = await fetch_with_playwright(place_url)
+    html_content, status_code, browser_cookies, playwright_user_agent = await fetch_with_playwright(place_url)
+
+    # Playwright에서 쿠키를 2개 이상 정상적으로 가져왔는지 확인
+    use_playwright_cookies = len(browser_cookies) >= 2
+
+    if use_playwright_cookies:
+        # Playwright 쿠키와 user_agent 사용
+        selected_user_agent = playwright_user_agent
+        asyncio.create_task(writelog(
+            f'get_place_answer: Using Playwright user_agent and {len(browser_cookies)} cookies', False))
+    else:
+        # ini 설정 사용
+        selected_user_agent = dataInfo.User_Agent
+        asyncio.create_task(writelog(
+            f'get_place_answer: Using ini config user_agent (Playwright cookies: {len(browser_cookies)})', False))
 
     # BrowserLikeClient 생성
     client = BrowserLikeClient(
-        user_agent=user_agent,
+        user_agent=selected_user_agent,
         store_token=dataInfo.store_token,
         store_nnb=dataInfo.store_nnb,
         store_fwb=dataInfo.store_fwb,
         store_buc=dataInfo.store_buc,
         proxy_config=proxyInfo.url)
 
-    # Playwright에서 가져온 쿠키를 BrowserLikeClient에 설정
-    if browser_cookies:
+    # Playwright에서 가져온 쿠키를 BrowserLikeClient에 설정 (2개 이상일 때만)
+    if use_playwright_cookies:
         client.cookie_manager.set_cookies_from_playwright(browser_cookies, place_url)
-        asyncio.create_task(writelog(
-            f'get_place_answer: Set {len(browser_cookies)} cookies from Playwright', False))
 
     # refresh 버퍼에 추가
     async with dataInfo.refresh_buf_lock:
@@ -3763,22 +3775,34 @@ async def get_kakao_place_answer(place_url, cnt, interval, pattern):
 
     # fetch_with_playwright를 사용하여 쿠키 가져오기
     asyncio.create_task(writelog(f'get_kakao_place_answer: Fetching cookies with Playwright for {place_url}', False))
-    html_content, status_code, browser_cookies, user_agent = await fetch_with_playwright(place_url)
+    html_content, status_code, browser_cookies, playwright_user_agent = await fetch_with_playwright(place_url)
+
+    # Playwright에서 쿠키를 2개 이상 정상적으로 가져왔는지 확인
+    use_playwright_cookies = len(browser_cookies) >= 2
+
+    if use_playwright_cookies:
+        # Playwright 쿠키와 user_agent 사용
+        selected_user_agent = playwright_user_agent
+        asyncio.create_task(writelog(
+            f'get_kakao_place_answer: Using Playwright user_agent and {len(browser_cookies)} cookies', False))
+    else:
+        # ini 설정 사용
+        selected_user_agent = dataInfo.User_Agent
+        asyncio.create_task(writelog(
+            f'get_kakao_place_answer: Using ini config user_agent (Playwright cookies: {len(browser_cookies)})', False))
 
     # BrowserLikeClient 생성
     client = BrowserLikeClient(
-        user_agent=user_agent,
+        user_agent=selected_user_agent,
         store_token=dataInfo.store_token,
         store_nnb=dataInfo.store_nnb,
         store_fwb=dataInfo.store_fwb,
         store_buc=dataInfo.store_buc,
         proxy_config=proxyInfo.url)
 
-    # Playwright에서 가져온 쿠키를 BrowserLikeClient에 설정
-    if browser_cookies:
+    # Playwright에서 가져온 쿠키를 BrowserLikeClient에 설정 (2개 이상일 때만)
+    if use_playwright_cookies:
         client.cookie_manager.set_cookies_from_playwright(browser_cookies, place_url)
-        asyncio.create_task(writelog(
-            f'get_kakao_place_answer: Set {len(browser_cookies)} cookies from Playwright', False))
 
     # refresh 버퍼에 추가
     async with dataInfo.refresh_buf_lock:
