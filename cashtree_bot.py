@@ -2960,14 +2960,36 @@ async def get_place_answer(place_url, cnt, interval, pattern):
 
         return list(dict.fromkeys(answer_list)), isSuccess
 
-    # BrowserLikeClient 생성 (Playwright 없이 직접 요청하므로 모든 쿠키 필요)
+    # fetch_with_playwright를 사용하여 쿠키 가져오기
+    asyncio.create_task(writelog(f'get_place_answer: Fetching cookies with Playwright for {place_url}', False))
+    html_content, status_code, browser_cookies, playwright_user_agent = await fetch_with_playwright(place_url)
+
+    # Playwright에서 쿠키를 2개 이상 정상적으로 가져왔는지 확인
+    use_playwright_cookies = len(browser_cookies) >= 2
+
+    if use_playwright_cookies:
+        # Playwright 쿠키와 user_agent 사용
+        selected_user_agent = playwright_user_agent
+        asyncio.create_task(writelog(
+            f'get_place_answer: Using Playwright user_agent and {len(browser_cookies)} cookies', False))
+    else:
+        # ini 설정 사용
+        selected_user_agent = dataInfo.User_Agent
+        asyncio.create_task(writelog(
+            f'get_place_answer: Using ini config user_agent (Playwright cookies: {len(browser_cookies)})', False))
+
+    # BrowserLikeClient 생성
     client = BrowserLikeClient(
-        user_agent=dataInfo.User_Agent,
+        user_agent=selected_user_agent,
         store_token=dataInfo.store_token,
         store_nnb=dataInfo.store_nnb,
         store_fwb=dataInfo.store_fwb,
         store_buc=dataInfo.store_buc,
         proxy_config=proxyInfo.url)
+
+    # Playwright에서 가져온 쿠키를 BrowserLikeClient에 설정 (2개 이상일 때만)
+    if use_playwright_cookies:
+        client.cookie_manager.set_cookies_from_playwright(browser_cookies, place_url)
 
     # refresh 버퍼에 추가
     async with dataInfo.refresh_buf_lock:
@@ -3751,14 +3773,36 @@ async def get_kakao_place_answer(place_url, cnt, interval, pattern):
 
         return list(dict.fromkeys(answer_list)), isSuccess
 
-    # BrowserLikeClient 생성 (Playwright 없이 직접 요청하므로 모든 쿠키 필요)
+    # fetch_with_playwright를 사용하여 쿠키 가져오기
+    asyncio.create_task(writelog(f'get_kakao_place_answer: Fetching cookies with Playwright for {place_url}', False))
+    html_content, status_code, browser_cookies, playwright_user_agent = await fetch_with_playwright(place_url)
+
+    # Playwright에서 쿠키를 2개 이상 정상적으로 가져왔는지 확인
+    use_playwright_cookies = len(browser_cookies) >= 2
+
+    if use_playwright_cookies:
+        # Playwright 쿠키와 user_agent 사용
+        selected_user_agent = playwright_user_agent
+        asyncio.create_task(writelog(
+            f'get_kakao_place_answer: Using Playwright user_agent and {len(browser_cookies)} cookies', False))
+    else:
+        # ini 설정 사용
+        selected_user_agent = dataInfo.User_Agent
+        asyncio.create_task(writelog(
+            f'get_kakao_place_answer: Using ini config user_agent (Playwright cookies: {len(browser_cookies)})', False))
+
+    # BrowserLikeClient 생성
     client = BrowserLikeClient(
-        user_agent=dataInfo.User_Agent,
+        user_agent=selected_user_agent,
         store_token=dataInfo.store_token,
         store_nnb=dataInfo.store_nnb,
         store_fwb=dataInfo.store_fwb,
         store_buc=dataInfo.store_buc,
         proxy_config=proxyInfo.url)
+
+    # Playwright에서 가져온 쿠키를 BrowserLikeClient에 설정 (2개 이상일 때만)
+    if use_playwright_cookies:
+        client.cookie_manager.set_cookies_from_playwright(browser_cookies, place_url)
 
     # refresh 버퍼에 추가
     async with dataInfo.refresh_buf_lock:
@@ -4126,8 +4170,52 @@ async def fetch_with_playwright(url: str) -> Tuple[str, int, List[Dict], str]:
 
                     # HTML 콘텐츠 가져오기
                     html_content = await page.content()
+                elif status_code == 429:
+                    # 429 Too Many Requests - ini 설정을 사용한 BrowserLikeClient로 재시도
+                    await page.wait_for_timeout(5000)  # 5초 대기
+                    html_content = await page.content()
+
+                    # 브라우저 종료
+                    try:
+                        await browser.close()
+                    except:
+                        pass
+
+                    # BrowserLikeClient로 재시도
+                    asyncio.create_task(writelog(
+                        f'fetch_with_playwright: 429 error detected, retrying with BrowserLikeClient using ini config', False))
+
+                    global dataInfo, proxyInfo
+                    client = BrowserLikeClient(
+                        user_agent=dataInfo.User_Agent,
+                        store_token=dataInfo.store_token,
+                        store_nnb=dataInfo.store_nnb,
+                        store_fwb=dataInfo.store_fwb,
+                        store_buc=dataInfo.store_buc,
+                        proxy_config=proxyInfo.url)
+
+                    try:
+                        response = await client.get(url)
+                        if response.status_code == 200:
+                            html_content = response.text
+                            status_code = response.status_code
+                            # BrowserLikeClient의 쿠키를 Playwright 형식으로 변환
+                            browser_cookies = client.cookie_manager.get_cookies_for_playwright(url)
+                            asyncio.create_task(writelog(
+                                f'fetch_with_playwright: BrowserLikeClient retry successful', False))
+                        else:
+                            asyncio.create_task(writelog(
+                                f'fetch_with_playwright: BrowserLikeClient retry failed with status {response.status_code}', False))
+                    except Exception as e:
+                        asyncio.create_task(writelog(
+                            f'fetch_with_playwright: BrowserLikeClient retry error: {str(e)}', False))
+                    finally:
+                        await client.close()
+
+                    return html_content, status_code, browser_cookies, dataInfo.User_Agent
+
                 elif status_code:
-                    # 상태 코드가 있지만 200이 아닌 경우 (403, 429 등)
+                    # 상태 코드가 있지만 200이 아닌 경우 (403 등)
                     await page.wait_for_timeout(5000)  # 5초 대기
                     html_content = await page.content()
                 else:
