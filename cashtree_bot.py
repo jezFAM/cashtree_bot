@@ -2968,13 +2968,19 @@ async def get_place_answer(place_url, cnt, interval, pattern):
     use_playwright_cookies = len(browser_cookies) >= 2
 
     if use_playwright_cookies:
-        # Playwright 쿠키와 user_agent 사용
+        # Playwright 쿠키와 user_agent 사용 (ini 쿠키는 사용 안 함)
         selected_user_agent = playwright_user_agent
+        selected_nnb = None
+        selected_fwb = None
+        selected_buc = None
         asyncio.create_task(writelog(
             f'get_place_answer: Using Playwright user_agent and {len(browser_cookies)} cookies', False))
     else:
         # ini 설정 사용
         selected_user_agent = dataInfo.User_Agent
+        selected_nnb = dataInfo.store_nnb
+        selected_fwb = dataInfo.store_fwb
+        selected_buc = dataInfo.store_buc
         asyncio.create_task(writelog(
             f'get_place_answer: Using ini config user_agent (Playwright cookies: {len(browser_cookies)})', False))
 
@@ -2982,9 +2988,9 @@ async def get_place_answer(place_url, cnt, interval, pattern):
     client = BrowserLikeClient(
         user_agent=selected_user_agent,
         store_token=dataInfo.store_token,
-        store_nnb=dataInfo.store_nnb,
-        store_fwb=dataInfo.store_fwb,
-        store_buc=dataInfo.store_buc,
+        store_nnb=selected_nnb,
+        store_fwb=selected_fwb,
+        store_buc=selected_buc,
         proxy_config=proxyInfo.url)
 
     # Playwright에서 가져온 쿠키를 BrowserLikeClient에 설정 (2개 이상일 때만)
@@ -3781,13 +3787,19 @@ async def get_kakao_place_answer(place_url, cnt, interval, pattern):
     use_playwright_cookies = len(browser_cookies) >= 2
 
     if use_playwright_cookies:
-        # Playwright 쿠키와 user_agent 사용
+        # Playwright 쿠키와 user_agent 사용 (ini 쿠키는 사용 안 함)
         selected_user_agent = playwright_user_agent
+        selected_nnb = None
+        selected_fwb = None
+        selected_buc = None
         asyncio.create_task(writelog(
             f'get_kakao_place_answer: Using Playwright user_agent and {len(browser_cookies)} cookies', False))
     else:
         # ini 설정 사용
         selected_user_agent = dataInfo.User_Agent
+        selected_nnb = dataInfo.store_nnb
+        selected_fwb = dataInfo.store_fwb
+        selected_buc = dataInfo.store_buc
         asyncio.create_task(writelog(
             f'get_kakao_place_answer: Using ini config user_agent (Playwright cookies: {len(browser_cookies)})', False))
 
@@ -3795,9 +3807,9 @@ async def get_kakao_place_answer(place_url, cnt, interval, pattern):
     client = BrowserLikeClient(
         user_agent=selected_user_agent,
         store_token=dataInfo.store_token,
-        store_nnb=dataInfo.store_nnb,
-        store_fwb=dataInfo.store_fwb,
-        store_buc=dataInfo.store_buc,
+        store_nnb=selected_nnb,
+        store_fwb=selected_fwb,
+        store_buc=selected_buc,
         proxy_config=proxyInfo.url)
 
     # Playwright에서 가져온 쿠키를 BrowserLikeClient에 설정 (2개 이상일 때만)
